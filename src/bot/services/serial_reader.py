@@ -90,6 +90,8 @@ class SerialReaderService:
             reading = parse_sensor_data(line)
             if reading:
                 self._latest_reading = reading
+                self.connection_state.last_successful_read = reading.timestamp
+                self.connection_state.is_connected = True
                 logger.debug(f"Read sensor data: {reading}")
             
             return reading
@@ -98,6 +100,24 @@ class SerialReaderService:
             logger.error(f"Error reading sensor data: {e}")
             self.connection_state.is_connected = False
             return None
+
+    async def run(self, stop_event: asyncio.Event) -> None:
+        """Continuously read sensor data and reconnect on failure.
+        
+        Args:
+            stop_event: Event used to signal loop shutdown.
+        """
+        while not stop_event.is_set():
+            if not self.is_connected():
+                connected = await self.connect()
+                if not connected:
+                    await asyncio.sleep(self.connection_state.backoff_delay)
+                    continue
+            
+            reading = await self.read_sensor_data()
+            if reading is None:
+                # Avoid tight loop when no data is available.
+                await asyncio.sleep(0.1)
     
     def get_latest_reading(self) -> Optional[SensorReading]:
         """Get the most recent sensor reading.

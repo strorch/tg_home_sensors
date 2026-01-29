@@ -54,6 +54,11 @@ async def main() -> None:
         logger.info("Arduino connected successfully")
     else:
         logger.warning("Failed to connect to Arduino - will retry in background")
+
+    serial_reader_stop_event = asyncio.Event()
+    serial_reader_task = asyncio.create_task(
+        serial_reader_module.serial_reader_service.run(serial_reader_stop_event)
+    )
     
     # Initialize bot application
     try:
@@ -88,6 +93,8 @@ async def main() -> None:
             await app.stop()
             await app.shutdown()
         if serial_reader_module.serial_reader_service:
+            serial_reader_stop_event.set()
+            await serial_reader_task
             await serial_reader_module.serial_reader_service.disconnect()
         await database.close()
         logger.info("Bot stopped")
