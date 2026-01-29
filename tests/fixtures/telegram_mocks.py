@@ -1,4 +1,5 @@
 """Test fixtures for Telegram mocks."""
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime, timezone
@@ -31,13 +32,13 @@ def mock_telegram_context():
 def mock_sensor_reading():
     """Create a mock SensorReading."""
     from src.bot.models.sensor_reading import SensorReading
-    
+
     return SensorReading(
         humidity=56.0,
         dht_temperature=23.4,
         lm35_temperature=24.9,
         thermistor_temperature=22.7,
-        timestamp=datetime.now(timezone.utc)
+        timestamp=datetime.now(timezone.utc),
     )
 
 
@@ -45,25 +46,16 @@ def mock_sensor_reading():
 def mock_user():
     """Create a mock User."""
     from src.bot.models.user import User
-    
+
     now = datetime.now(timezone.utc)
-    return User(
-        chat_id=12345,
-        humidity_min=40.0,
-        humidity_max=60.0,
-        created_at=now,
-        updated_at=now
-    )
+    return User(chat_id=12345, humidity_min=40.0, humidity_max=60.0, created_at=now, updated_at=now)
 
 
 @pytest.fixture
 def mock_alert_state():
     """Create a mock AlertState."""
     from src.bot.models.alert_state import AlertState
-    
+
     return AlertState(
-        chat_id=12345,
-        current_state="normal",
-        last_alert_time=None,
-        last_alert_type=None
+        chat_id=12345, current_state="normal", last_alert_time=None, last_alert_type=None
     )

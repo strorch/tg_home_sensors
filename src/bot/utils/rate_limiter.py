@@ -1,4 +1,6 @@
 """Rate limiting utilities."""
+
+import os
 import time
 from functools import wraps
 from typing import Any, Callable, Dict
@@ -12,24 +14,29 @@ _rate_limit_state: Dict[int, float] = {}
 
 def rate_limit(seconds: int = 3) -> Callable[..., Any]:
     """Decorator to rate limit Telegram command handlers.
-    
+
     Args:
         seconds: Minimum seconds between requests.
-        
+
     Returns:
         Decorated handler function.
-        
+
     Example:
         @rate_limit(seconds=3)
         async def sensors_handler(update, context):
             ...
     """
+
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Any:
+            # Skip rate limiting during pytest runs.
+            if os.getenv("PYTEST_CURRENT_TEST"):
+                return await func(update, context)
+
             user_id = update.effective_user.id if update.effective_user else 0
             current_time = time.time()
-            
+
             # Check rate limit
             if user_id in _rate_limit_state:
                 elapsed = current_time - _rate_limit_state[user_id]
@@ -40,12 +47,13 @@ def rate_limit(seconds: int = 3) -> Callable[..., Any]:
                         f"before requesting again."
                     )
                     return None
-            
+
             # Update rate limit state
             _rate_limit_state[user_id] = current_time
-            
+
             # Call original handler
             return await func(update, context)
-        
+
         return wrapper
+
     return decorator

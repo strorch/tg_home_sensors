@@ -104,21 +104,21 @@
 
 > **TDD: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T039 [P] [US2] Write unit test for alert manager in tests/unit/test_alert_manager.py (threshold detection, cooldown logic, state transitions)
-- [ ] T040 [P] [US2] Write integration test for alert flow in tests/integration/test_alert_flow.py (4 acceptance scenarios from spec.md: high alert, low alert, cooldown, recovery)
-- [ ] T041 [P] [US2] Write test for multi-user alert isolation in tests/integration/test_alert_flow.py (each user receives only their own alerts)
+- [X] T039 [P] [US2] Write unit test for alert manager in tests/unit/test_alert_manager.py (threshold detection, cooldown logic, state transitions)
+- [X] T040 [P] [US2] Write integration test for alert flow in tests/integration/test_alert_flow.py (4 acceptance scenarios from spec.md: high alert, low alert, cooldown, recovery)
+- [X] T041 [P] [US2] Write test for multi-user alert isolation in tests/integration/test_alert_flow.py (each user receives only their own alerts)
 
 ### Implementation for User Story 2
 
-- [ ] T042 [P] [US2] Implement alert manager service in src/bot/services/alert_manager.py (threshold monitoring, cooldown checking, state management per data-model.md AlertState)
-- [ ] T043 [US2] Integrate alert manager with serial reader in src/bot/services/serial_reader.py (check each reading against thresholds, trigger alerts)
-- [ ] T044 [US2] Implement high humidity alert message formatting in alert_manager.py (per contracts/bot-commands.md automatic alerts section)
-- [ ] T045 [P] [US2] Implement low humidity alert message formatting in alert_manager.py (per contracts/bot-commands.md automatic alerts section)
-- [ ] T046 [P] [US2] Implement recovery notification message formatting in alert_manager.py (per contracts/bot-commands.md automatic alerts section)
-- [ ] T047 [US2] Implement alert state persistence in user_settings.py (update AlertState in database after sending alert)
-- [ ] T048 [US2] Add background task for continuous monitoring in src/main.py (run serial reader and alert manager concurrently with bot)
-- [ ] T049 [US2] Implement connection lost/restored notifications in serial_reader.py (notify users on disconnect/reconnect per contracts)
-- [ ] T050 [US2] Run all User Story 2 tests and verify they pass
+- [X] T042 [P] [US2] Implement alert manager service in src/bot/services/alert_manager.py (threshold monitoring, cooldown checking, state management per data-model.md AlertState)
+- [X] T043 [US2] Integrate alert manager with serial reader in src/bot/services/serial_reader.py (check each reading against thresholds, trigger alerts)
+- [X] T044 [US2] Implement high humidity alert message formatting in alert_manager.py (per contracts/bot-commands.md automatic alerts section)
+- [X] T045 [P] [US2] Implement low humidity alert message formatting in alert_manager.py (per contracts/bot-commands.md automatic alerts section)
+- [X] T046 [P] [US2] Implement recovery notification message formatting in alert_manager.py (per contracts/bot-commands.md automatic alerts section)
+- [X] T047 [US2] Implement alert state persistence in user_settings.py (update AlertState in database after sending alert)
+- [X] T048 [US2] Add background task for continuous monitoring in src/main.py (run serial reader and alert manager concurrently with bot)
+- [X] T049 [US2] Implement connection lost/restored notifications in serial_reader.py (notify users on disconnect/reconnect per contracts)
+- [X] T050 [US2] Run all User Story 2 tests and verify they pass
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently. Bot monitors and alerts automatically.
 
@@ -134,20 +134,20 @@
 
 > **TDD: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T051 [P] [US3] Write integration test for /settings handler in tests/integration/test_settings_handler.py (display current thresholds)
-- [ ] T052 [P] [US3] Write integration test for /set_humidity_min in tests/integration/test_settings_handler.py (4 acceptance scenarios from spec.md: valid, out of range, > max, missing param)
-- [ ] T053 [P] [US3] Write integration test for /set_humidity_max in tests/integration/test_settings_handler.py (4 acceptance scenarios from spec.md: valid, out of range, < min, missing param)
-- [ ] T054 [P] [US3] Write test for threshold validation in tests/unit/test_user_settings.py (min < max constraint, range validation)
+- [X] T051 [P] [US3] Write integration test for /settings handler in tests/integration/test_settings_handler.py (display current thresholds)
+- [X] T052 [P] [US3] Write integration test for /set_humidity_min in tests/integration/test_settings_handler.py (4 acceptance scenarios from spec.md: valid, out of range, > max, missing param)
+- [X] T053 [P] [US3] Write integration test for /set_humidity_max in tests/integration/test_settings_handler.py (4 acceptance scenarios from spec.md: valid, out of range, < min, missing param)
+- [X] T054 [P] [US3] Write test for threshold validation in tests/unit/test_user_settings.py (min < max constraint, range validation)
 
 ### Implementation for User Story 3
 
-- [ ] T055 [P] [US3] Implement /settings handler in src/bot/handlers/settings.py (fetch and display user thresholds per contracts/bot-commands.md)
-- [ ] T056 [P] [US3] Implement /set_humidity_min handler in src/bot/handlers/settings.py (parse value, validate, update database per contracts/bot-commands.md)
-- [ ] T057 [P] [US3] Implement /set_humidity_max handler in src/bot/handlers/settings.py (parse value, validate, update database per contracts/bot-commands.md)
-- [ ] T058 [US3] Add input validation in settings handlers (range checks, min < max validation, error messages per contracts)
-- [ ] T059 [US3] Wire up settings handlers in src/main.py (register /settings, /set_humidity_min, /set_humidity_max with dispatcher)
-- [ ] T060 [US3] Apply rate limiting to settings handlers (use rate_limiter decorator per research.md)
-- [ ] T061 [US3] Run all User Story 3 tests and verify they pass
+- [X] T055 [P] [US3] Implement /settings handler in src/bot/handlers/settings.py (fetch and display user thresholds per contracts/bot-commands.md)
+- [X] T056 [P] [US3] Implement /set_humidity_min handler in src/bot/handlers/settings.py (parse value, validate, update database per contracts/bot-commands.md)
+- [X] T057 [P] [US3] Implement /set_humidity_max handler in src/bot/handlers/settings.py (parse value, validate, update database per contracts/bot-commands.md)
+- [X] T058 [US3] Add input validation in settings handlers (range checks, min < max validation, error messages per contracts)
+- [X] T059 [US3] Wire up settings handlers in src/main.py (register /settings, /set_humidity_min, /set_humidity_max with dispatcher)
+- [X] T060 [US3] Apply rate limiting to settings handlers (use rate_limiter decorator per research.md)
+- [X] T061 [US3] Run all User Story 3 tests and verify they pass
 
 **Checkpoint**: All user stories should now be independently functional. Users can query, receive alerts, and configure thresholds.
 
@@ -157,19 +157,19 @@
 
 **Purpose**: Final integration, error handling, logging, and production readiness
 
-- [ ] T062 [P] Add comprehensive error logging throughout all services (use logger.py, log all exceptions with context)
-- [ ] T063 [P] Add user interaction logging (log all commands received with user_id, command, timestamp)
-- [ ] T064 [P] Add sensor data logging (log readings with configurable frequency to prevent log spam)
-- [ ] T065 Implement graceful shutdown in src/main.py (close serial connection, close database, stop bot cleanly)
-- [ ] T066 Add type hints to all functions and methods (run mypy to verify)
-- [ ] T067 [P] Format all code with ruff (run `uv run ruff format .`)
-- [ ] T068 [P] Lint all code with ruff (run `uv run ruff check .` and fix issues)
-- [ ] T069 Run full test suite with coverage (target 80%+ per constitution)
-- [ ] T070 Create .env file from .env.example for local testing (not committed)
+- [X] T062 [P] Add comprehensive error logging throughout all services (use logger.py, log all exceptions with context)
+- [X] T063 [P] Add user interaction logging (log all commands received with user_id, command, timestamp)
+- [X] T064 [P] Add sensor data logging (log readings with configurable frequency to prevent log spam)
+- [X] T065 Implement graceful shutdown in src/main.py (close serial connection, close database, stop bot cleanly)
+- [X] T066 Add type hints to all functions and methods (run mypy to verify)
+- [X] T067 [P] Format all code with ruff (run `uv run ruff format .`)
+- [X] T068 [P] Lint all code with ruff (run `uv run ruff check .` and fix issues)
+- [X] T069 Run full test suite with coverage (target 80%+ per constitution)
+- [X] T070 Create .env file from .env.example for local testing (not committed)
 - [ ] T071 Test bot end-to-end with real Arduino connected (manual testing against quickstart.md scenarios)
-- [ ] T072 [P] Update README.md with troubleshooting section from quickstart.md
-- [ ] T073 Lock dependencies with uv (run `uv lock` and commit uv.lock)
-- [ ] T074 Final constitution compliance check (verify all 5 principles satisfied)
+- [X] T072 [P] Update README.md with troubleshooting section from quickstart.md
+- [X] T073 Lock dependencies with uv (run `uv lock` and commit uv.lock)
+- [X] T074 Final constitution compliance check (verify all 5 principles satisfied)
 
 ---
 

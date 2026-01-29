@@ -1,38 +1,55 @@
 """Start and help command handlers."""
+
 import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
 import src.bot.services.user_settings as user_settings_module
 
+# Alias for test patching; resolved dynamically at runtime.
+user_settings_service = user_settings_module.user_settings_service
+
 
 logger = logging.getLogger(__name__)
 
 
+def _safe_humidity(value: object, default: float) -> float:
+    if isinstance(value, (int, float, str)):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+    return default
+
+
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command to initialize user.
-    
+
     Args:
         update: Telegram update.
         context: Telegram context.
     """
     if not update.effective_user or not update.message:
         return
-    
+
     chat_id = update.effective_user.id
-    
+
     try:
         # Check if user exists
-        if user_settings_module.user_settings_service is None:
+        user_service = user_settings_service or user_settings_module.user_settings_service
+        if user_service is None:
             raise RuntimeError("User settings service not initialized")
 
-        user = await user_settings_module.user_settings_service.get_user(chat_id)
-        
+        user = await user_service.get_user(chat_id)
+
         if user is None:
             # Create new user with defaults
-            user = await user_settings_module.user_settings_service.create_user(chat_id)
+            user = await user_service.create_user(chat_id)
             logger.info(f"Initialized new user {chat_id}")
-        
+
+        humidity_min = _safe_humidity(getattr(user, "humidity_min", None), 40.0)
+        humidity_max = _safe_humidity(getattr(user, "humidity_max", None), 60.0)
+
         # Send welcome message
         welcome_msg = (
             "Welcome to Arduino Home Sensors Bot! 🌡️💧\n\n"
@@ -44,13 +61,13 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "/set_humidity_max <value> - Set maximum humidity %\n"
             "/help - Show this help message\n\n"
             "Your current thresholds:\n"
-            f"• Min: {user.humidity_min}%\n"
-            f"• Max: {user.humidity_max}%\n\n"
+            f"• Min: {humidity_min}%\n"
+            f"• Max: {humidity_max}%\n\n"
             "You'll receive alerts when humidity goes outside this range."
         )
-        
+
         await update.message.reply_text(welcome_msg)
-        
+
     except Exception as e:
         logger.error(f"Error in start handler: {e}", exc_info=True)
         await update.message.reply_text(
@@ -60,14 +77,14 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /help command to display help information.
-    
+
     Args:
         update: Telegram update.
         context: Telegram context.
     """
     if not update.message:
         return
-    
+
     help_msg = (
         "Arduino Home Sensors Bot - Help 📖\n\n"
         "📊 Monitoring Commands:\n"
@@ -86,5 +103,5 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "• Humidity returns to normal range\n\n"
         "⏱️ Alert cooldown: 5 minutes between similar alerts"
     )
-    
+
     await update.message.reply_text(help_msg)
