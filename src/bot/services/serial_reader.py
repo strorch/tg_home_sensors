@@ -38,6 +38,12 @@ class SerialReaderService:
             True if connection successful, False otherwise.
         """
         try:
+            logger.info(
+                "Connecting to Arduino serial port: "
+                f"port={self.connection_state.port}, "
+                f"baud_rate={self.connection_state.baud_rate}, "
+                f"timeout={self.connection_state.timeout}s"
+            )
             # Run serial connection in thread pool (blocking I/O)
             self._serial = await asyncio.to_thread(
                 serial.Serial,
