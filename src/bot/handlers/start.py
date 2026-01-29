@@ -3,7 +3,7 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from src.bot.services.user_settings import user_settings_service
+import src.bot.services.user_settings as user_settings_module
 
 
 logger = logging.getLogger(__name__)
@@ -23,11 +23,14 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     try:
         # Check if user exists
-        user = await user_settings_service.get_user(chat_id)
+        if user_settings_module.user_settings_service is None:
+            raise RuntimeError("User settings service not initialized")
+
+        user = await user_settings_module.user_settings_service.get_user(chat_id)
         
         if user is None:
             # Create new user with defaults
-            user = await user_settings_service.create_user(chat_id)
+            user = await user_settings_module.user_settings_service.create_user(chat_id)
             logger.info(f"Initialized new user {chat_id}")
         
         # Send welcome message

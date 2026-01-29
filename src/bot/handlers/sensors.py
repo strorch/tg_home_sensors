@@ -3,8 +3,8 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from src.bot.services.serial_reader import serial_reader_service
-from src.bot.services.user_settings import user_settings_service
+import src.bot.services.serial_reader as serial_reader_module
+import src.bot.services.user_settings as user_settings_module
 from src.bot.utils.rate_limiter import rate_limit
 
 
@@ -26,7 +26,13 @@ async def sensors_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     try:
         # Get latest sensor reading
-        reading = serial_reader_service.get_latest_reading()
+        if serial_reader_module.serial_reader_service is None:
+            raise RuntimeError("Serial reader service not initialized")
+
+        if user_settings_module.user_settings_service is None:
+            raise RuntimeError("User settings service not initialized")
+
+        reading = serial_reader_module.serial_reader_service.get_latest_reading()
         
         if reading is None:
             await update.message.reply_text(
@@ -38,7 +44,7 @@ async def sensors_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
         
         # Get user settings to determine status
-        user = await user_settings_service.get_user(chat_id)
+        user = await user_settings_module.user_settings_service.get_user(chat_id)
         if user is None:
             await update.message.reply_text(
                 "Please initialize the bot first with /start"
