@@ -7,14 +7,8 @@ from src.bot.handlers.start import start_handler
 
 
 @pytest.mark.asyncio
-async def test_start_new_user(mock_telegram_update, mock_telegram_context, tmp_path):
+async def test_start_new_user(mock_telegram_update, mock_telegram_context):
     """Test /start command for a new user creates user and alert state."""
-    # Setup database
-    from src.bot.services.database import Database
-
-    db = Database(str(tmp_path / "test.db"))
-    await db.connect()
-
     # Mock user settings service
     with patch("src.bot.handlers.start.user_settings_service") as mock_service:
         mock_service.get_user = AsyncMock(return_value=None)  # User doesn't exist
@@ -32,8 +26,6 @@ async def test_start_new_user(mock_telegram_update, mock_telegram_context, tmp_p
         assert "Welcome to Arduino Home Sensors Bot" in message
         assert "40.0%" in message  # Default min
         assert "60.0%" in message  # Default max
-
-    await db.close()
 
 
 @pytest.mark.asyncio

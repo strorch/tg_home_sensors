@@ -1,5 +1,7 @@
 """Configuration management using pydantic-settings."""
 
+import os
+from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -8,8 +10,7 @@ class Config(BaseSettings):
     """Application configuration loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
+        env_file=None,
         case_sensitive=False,
     )
 
@@ -21,7 +22,9 @@ class Config(BaseSettings):
     serial_baud_rate: int = Field(default=9600, description="Serial baud rate")
 
     # Database
-    database_path: str = Field(default="data/sensors.db", description="SQLite database path")
+    database_url: str = Field(
+        ..., description="PostgreSQL database URL (e.g., postgresql+asyncpg://...)"
+    )
 
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
@@ -37,4 +40,21 @@ def load_config() -> Config:
     Raises:
         ValidationError: If required config is missing or invalid.
     """
+    if not os.getenv("PYTEST_CURRENT_TEST"):
+        _load_dotenv()
     return Config()
+
+
+def _load_dotenv() -> None:
+    dotenv_path = Path(".env")
+    if not dotenv_path.exists():
+        return
+
+    for line in dotenv_path.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("'").strip('"')
+        os.environ.setdefault(key, value)

@@ -1,15 +1,30 @@
 """Unit tests for user settings service."""
 
+import os
 import pytest
 from src.bot.services.database import Database
 from src.bot.services.user_settings import UserSettingsService
 
 
+def _database_url() -> str:
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        pytest.skip("DATABASE_URL not set for PostgreSQL tests")
+    return url
+
+
+async def _setup_database():
+    db = Database(_database_url())
+    await db.connect()
+    await db.execute("DELETE FROM alert_states")
+    await db.execute("DELETE FROM users")
+    return db
+
+
 @pytest.mark.asyncio
 async def test_update_threshold_validates_min_less_than_max(tmp_path):
     """Test that updating thresholds validates min < max constraint."""
-    database = Database(str(tmp_path / "test.db"))
-    await database.connect()
+    database = await _setup_database()
     user_service = UserSettingsService(database)
 
     # Create user
@@ -33,8 +48,7 @@ async def test_update_threshold_validates_min_less_than_max(tmp_path):
 @pytest.mark.asyncio
 async def test_update_threshold_validates_range_0_100(tmp_path):
     """Test that threshold values must be between 0 and 100."""
-    database = Database(str(tmp_path / "test.db"))
-    await database.connect()
+    database = await _setup_database()
     user_service = UserSettingsService(database)
 
     await user_service.create_or_update_user(chat_id=12345, humidity_min=40.0, humidity_max=60.0)
@@ -57,8 +71,7 @@ async def test_update_threshold_validates_range_0_100(tmp_path):
 @pytest.mark.asyncio
 async def test_update_threshold_accepts_valid_values(tmp_path):
     """Test that valid threshold updates succeed."""
-    database = Database(str(tmp_path / "test.db"))
-    await database.connect()
+    database = await _setup_database()
     user_service = UserSettingsService(database)
 
     await user_service.create_or_update_user(chat_id=12345, humidity_min=40.0, humidity_max=60.0)

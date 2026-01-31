@@ -91,6 +91,25 @@ uv run ruff format .
 uv run mypy src/
 ```
 
+### Docker (PostgreSQL)
+```bash
+docker compose up --build
+```
+
+Notes:
+- The container uses PostgreSQL via `DATABASE_URL` in `docker-compose.yml`.
+- If you need Arduino access, uncomment the `devices` mapping and set `SERIAL_PORT`.
+
+### VS Code Dev Container
+- Open the repository in VS Code and choose **Reopen in Container**.
+- The dev container uses Docker Compose and the PostgreSQL service automatically.
+
+### Migrations (Alembic)
+```bash
+export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/tg_home_sensors
+uv run alembic upgrade head
+```
+
 ## Troubleshooting
 
 ### Permission Denied (Linux)
@@ -131,7 +150,7 @@ tests/
 - **Language**: Python 3.11+
 - **Bot Framework**: python-telegram-bot v20+
 - **Serial I/O**: pyserial with asyncio
-- **Database**: SQLite with aiosqlite
+- **Database**: PostgreSQL via SQLAlchemy (async)
 - **Testing**: pytest with 80%+ coverage target
 
 For detailed technical documentation, see [Implementation Plan](specs/001-arduino-sensor-monitoring/plan.md).

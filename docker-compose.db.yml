@@ -1,0 +1,20 @@
+services:
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: tg_home_sensors
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - tg_home_sensors_db:/var/lib/postgresql/data
+    networks:
+      - bot-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tg_home_sensors"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  tg_home_sensors_db:

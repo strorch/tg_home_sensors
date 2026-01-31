@@ -145,26 +145,29 @@ class AlertManager:
         now = datetime.now(timezone.utc)
 
         try:
-            async with self.db.connection.cursor() as cursor:
-                if new_state == "normal":
-                    # Recovery - clear alert time and type
-                    await cursor.execute(
-                        """UPDATE alert_states 
-                           SET current_state = ?, last_alert_time = NULL, last_alert_type = NULL
-                           WHERE chat_id = ?""",
-                        (new_state, chat_id),
-                    )
-                else:
-                    # Alert - update state, time, and type
-                    await cursor.execute(
-                        """UPDATE alert_states 
-                           SET current_state = ?, last_alert_time = ?, last_alert_type = ?
-                           WHERE chat_id = ?""",
-                        (new_state, now.isoformat(), alert_type, chat_id),
-                    )
+            if new_state == "normal":
+                # Recovery - clear alert time and type
+                await self.db.execute(
+                    """UPDATE alert_states 
+                       SET current_state = :current_state, last_alert_time = NULL, last_alert_type = NULL
+                       WHERE chat_id = :chat_id""",
+                    {"current_state": new_state, "chat_id": chat_id},
+                )
+            else:
+                # Alert - update state, time, and type
+                await self.db.execute(
+                    """UPDATE alert_states 
+                       SET current_state = :current_state, last_alert_time = :last_alert_time, last_alert_type = :last_alert_type
+                       WHERE chat_id = :chat_id""",
+                    {
+                        "current_state": new_state,
+                        "last_alert_time": now.isoformat(),
+                        "last_alert_type": alert_type,
+                        "chat_id": chat_id,
+                    },
+                )
 
-                await self.db.connection.commit()
-                logger.info(f"Updated alert state for user {chat_id}: {new_state}")
+            logger.info(f"Updated alert state for user {chat_id}: {new_state}")
 
         except Exception as e:
             logger.error(f"Error updating alert state for user {chat_id}: {e}")
@@ -179,38 +182,39 @@ class AlertManager:
         """
         try:
             # Get user settings
-            async with self.db.connection.cursor() as cursor:
-                await cursor.execute("SELECT * FROM users WHERE chat_id = ?", (chat_id,))
-                user_row = await cursor.fetchone()
+            user_row = await self.db.fetch_one(
+                "SELECT * FROM users WHERE chat_id = :chat_id",
+                {"chat_id": chat_id},
+            )
+            if user_row is None:
+                return  # User not registered
 
-                if user_row is None:
-                    return  # User not registered
+            user = User(
+                chat_id=user_row["chat_id"],
+                humidity_min=user_row["humidity_min"],
+                humidity_max=user_row["humidity_max"],
+                created_at=datetime.fromisoformat(user_row["created_at"]),
+                updated_at=datetime.fromisoformat(user_row["updated_at"]),
+            )
 
-                user = User(
-                    chat_id=user_row["chat_id"],
-                    humidity_min=user_row["humidity_min"],
-                    humidity_max=user_row["humidity_max"],
-                    created_at=datetime.fromisoformat(user_row["created_at"]),
-                    updated_at=datetime.fromisoformat(user_row["updated_at"]),
-                )
+            # Get alert state
+            state_row = await self.db.fetch_one(
+                "SELECT * FROM alert_states WHERE chat_id = :chat_id",
+                {"chat_id": chat_id},
+            )
+            if state_row is None:
+                return  # No alert state
 
-                # Get alert state
-                await cursor.execute("SELECT * FROM alert_states WHERE chat_id = ?", (chat_id,))
-                state_row = await cursor.fetchone()
-
-                if state_row is None:
-                    return  # No alert state
-
-                alert_state = AlertState(
-                    chat_id=state_row["chat_id"],
-                    current_state=state_row["current_state"],
-                    last_alert_time=(
-                        datetime.fromisoformat(state_row["last_alert_time"])
-                        if state_row["last_alert_time"]
-                        else None
-                    ),
-                    last_alert_type=state_row["last_alert_type"],
-                )
+            alert_state = AlertState(
+                chat_id=state_row["chat_id"],
+                current_state=state_row["current_state"],
+                last_alert_time=(
+                    datetime.fromisoformat(state_row["last_alert_time"])
+                    if state_row["last_alert_time"]
+                    else None
+                ),
+                last_alert_type=state_row["last_alert_type"],
+            )
 
             # Determine new state
             new_state = self.determine_state(reading, user)

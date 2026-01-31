@@ -1,5 +1,6 @@
 """Integration tests for alert flow."""
 
+import os
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
@@ -7,16 +8,31 @@ from unittest.mock import AsyncMock
 from src.bot.models.sensor_reading import SensorReading
 
 
+def _database_url() -> str:
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        pytest.skip("DATABASE_URL not set for PostgreSQL tests")
+    return url
+
+
+async def _setup_database():
+    from src.bot.services.database import Database
+
+    db = Database(_database_url())
+    await db.connect()
+    await db.execute("DELETE FROM alert_states")
+    await db.execute("DELETE FROM users")
+    return db
+
+
 @pytest.mark.asyncio
 async def test_high_humidity_alert_sent(mock_telegram_context, tmp_path):
     """Test high humidity alert is sent when threshold exceeded."""
-    from src.bot.services.database import Database
     from src.bot.services.user_settings import UserSettingsService
     from src.bot.services.alert_manager import AlertManager
 
     # Setup database
-    db = Database(str(tmp_path / "test.db"))
-    await db.connect()
+    db = await _setup_database()
 
     user_service = UserSettingsService(db)
 
@@ -51,12 +67,10 @@ async def test_high_humidity_alert_sent(mock_telegram_context, tmp_path):
 @pytest.mark.asyncio
 async def test_low_humidity_alert_sent(mock_telegram_context, tmp_path):
     """Test low humidity alert is sent when below threshold."""
-    from src.bot.services.database import Database
     from src.bot.services.user_settings import UserSettingsService
     from src.bot.services.alert_manager import AlertManager
 
-    db = Database(str(tmp_path / "test.db"))
-    await db.connect()
+    db = await _setup_database()
 
     user_service = UserSettingsService(db)
     await user_service.create_user(chat_id=12345, humidity_min=40.0, humidity_max=60.0)
@@ -84,12 +98,10 @@ async def test_low_humidity_alert_sent(mock_telegram_context, tmp_path):
 @pytest.mark.asyncio
 async def test_cooldown_prevents_duplicate_alerts(mock_telegram_context, tmp_path):
     """Test cooldown prevents sending alerts too frequently."""
-    from src.bot.services.database import Database
     from src.bot.services.user_settings import UserSettingsService
     from src.bot.services.alert_manager import AlertManager
 
-    db = Database(str(tmp_path / "test.db"))
-    await db.connect()
+    db = await _setup_database()
 
     user_service = UserSettingsService(db)
     await user_service.create_user(chat_id=12345)
@@ -120,12 +132,10 @@ async def test_cooldown_prevents_duplicate_alerts(mock_telegram_context, tmp_pat
 @pytest.mark.asyncio
 async def test_recovery_notification_sent(mock_telegram_context, tmp_path):
     """Test recovery notification when humidity returns to normal."""
-    from src.bot.services.database import Database
     from src.bot.services.user_settings import UserSettingsService
     from src.bot.services.alert_manager import AlertManager
 
-    db = Database(str(tmp_path / "test.db"))
-    await db.connect()
+    db = await _setup_database()
 
     user_service = UserSettingsService(db)
     await user_service.create_user(chat_id=12345)
@@ -167,12 +177,10 @@ async def test_recovery_notification_sent(mock_telegram_context, tmp_path):
 @pytest.mark.asyncio
 async def test_multi_user_alert_isolation(mock_telegram_context, tmp_path):
     """Test each user receives only their own alerts."""
-    from src.bot.services.database import Database
     from src.bot.services.user_settings import UserSettingsService
     from src.bot.services.alert_manager import AlertManager
 
-    db = Database(str(tmp_path / "test.db"))
-    await db.connect()
+    db = await _setup_database()
 
     user_service = UserSettingsService(db)
 

@@ -135,10 +135,10 @@ async def main() -> None:
     logger.info("Bot starting...")
 
     # Initialize database
-    database = Database(config.database_path)
+    database = Database(config.database_url)
     try:
         await database.connect()
-        logger.info(f"Database initialized at {config.database_path}")
+        logger.info("Database initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
         return

@@ -36,16 +36,17 @@ def rate_limit(seconds: int = 3) -> Callable[..., Any]:
 
             user_id = update.effective_user.id if update.effective_user else 0
             current_time = time.time()
-
+            
             # Check rate limit
             if user_id in _rate_limit_state:
                 elapsed = current_time - _rate_limit_state[user_id]
                 if elapsed < seconds:
                     remaining = int(seconds - elapsed) + 1
-                    await update.message.reply_text(
-                        f"⏸️ Please wait {remaining} more second{'s' if remaining > 1 else ''} "
-                        f"before requesting again."
-                    )
+                    if update.effective_message:
+                        await update.effective_message.reply_text(
+                            f"⏸️ Please wait {remaining} more second{'s' if remaining > 1 else ''} "
+                            f"before requesting again."
+                        )
                     return None
 
             # Update rate limit state

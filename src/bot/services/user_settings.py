@@ -33,20 +33,20 @@ class UserSettingsService:
             User object if found, None otherwise.
         """
         try:
-            async with self.db.connection.cursor() as cursor:
-                await cursor.execute("SELECT * FROM users WHERE chat_id = ?", (chat_id,))
-                row = await cursor.fetchone()
+            row = await self.db.fetch_one(
+                "SELECT * FROM users WHERE chat_id = :chat_id",
+                {"chat_id": chat_id},
+            )
+            if row is None:
+                return None
 
-                if row is None:
-                    return None
-
-                return User(
-                    chat_id=row["chat_id"],
-                    humidity_min=row["humidity_min"],
-                    humidity_max=row["humidity_max"],
-                    created_at=datetime.fromisoformat(row["created_at"]),
-                    updated_at=datetime.fromisoformat(row["updated_at"]),
-                )
+            return User(
+                chat_id=row["chat_id"],
+                humidity_min=row["humidity_min"],
+                humidity_max=row["humidity_max"],
+                created_at=datetime.fromisoformat(row["created_at"]),
+                updated_at=datetime.fromisoformat(row["updated_at"]),
+            )
         except Exception as e:
             logger.error(f"Error getting user {chat_id}: {e}")
             raise
@@ -75,27 +75,24 @@ class UserSettingsService:
                 updated_at=now,
             )
 
-            async with self.db.connection.cursor() as cursor:
-                await cursor.execute(
-                    """INSERT INTO users (chat_id, humidity_min, humidity_max, created_at, updated_at)
-                       VALUES (?, ?, ?, ?, ?)""",
-                    (
-                        user.chat_id,
-                        user.humidity_min,
-                        user.humidity_max,
-                        user.created_at.isoformat(),
-                        user.updated_at.isoformat(),
-                    ),
-                )
+            await self.db.execute(
+                """INSERT INTO users (chat_id, humidity_min, humidity_max, created_at, updated_at)
+                   VALUES (:chat_id, :humidity_min, :humidity_max, :created_at, :updated_at)""",
+                {
+                    "chat_id": user.chat_id,
+                    "humidity_min": user.humidity_min,
+                    "humidity_max": user.humidity_max,
+                    "created_at": user.created_at.isoformat(),
+                    "updated_at": user.updated_at.isoformat(),
+                },
+            )
 
-                # Create alert state
-                await cursor.execute(
-                    """INSERT INTO alert_states (chat_id, current_state)
-                       VALUES (?, 'normal')""",
-                    (chat_id,),
-                )
-
-                await self.db.connection.commit()
+            # Create alert state
+            await self.db.execute(
+                """INSERT INTO alert_states (chat_id, current_state)
+                   VALUES (:chat_id, 'normal')""",
+                {"chat_id": chat_id},
+            )
 
             logger.info(f"Created user {chat_id}")
             return user
@@ -136,14 +133,17 @@ class UserSettingsService:
             raise ValueError("humidity_max must be greater than humidity_min")
 
         try:
-            async with self.db.connection.cursor() as cursor:
-                await cursor.execute(
-                    """UPDATE users 
-                       SET humidity_min = ?, humidity_max = ?, updated_at = ?
-                       WHERE chat_id = ?""",
-                    (user.humidity_min, user.humidity_max, user.updated_at.isoformat(), chat_id),
-                )
-                await self.db.connection.commit()
+            await self.db.execute(
+                """UPDATE users 
+                   SET humidity_min = :humidity_min, humidity_max = :humidity_max, updated_at = :updated_at
+                   WHERE chat_id = :chat_id""",
+                {
+                    "humidity_min": user.humidity_min,
+                    "humidity_max": user.humidity_max,
+                    "updated_at": user.updated_at.isoformat(),
+                    "chat_id": chat_id,
+                },
+            )
 
             logger.info(f"Updated settings for user {chat_id}")
             return user
@@ -207,14 +207,17 @@ class UserSettingsService:
         user.updated_at = datetime.now(timezone.utc)
 
         try:
-            async with self.db.connection.cursor() as cursor:
-                await cursor.execute(
-                    """UPDATE users 
-                       SET humidity_min = ?, humidity_max = ?, updated_at = ?
-                       WHERE chat_id = ?""",
-                    (user.humidity_min, user.humidity_max, user.updated_at.isoformat(), chat_id),
-                )
-                await self.db.connection.commit()
+            await self.db.execute(
+                """UPDATE users 
+                   SET humidity_min = :humidity_min, humidity_max = :humidity_max, updated_at = :updated_at
+                   WHERE chat_id = :chat_id""",
+                {
+                    "humidity_min": user.humidity_min,
+                    "humidity_max": user.humidity_max,
+                    "updated_at": user.updated_at.isoformat(),
+                    "chat_id": chat_id,
+                },
+            )
 
             logger.info(
                 f"Updated thresholds for user {chat_id}: min={humidity_min}, max={humidity_max}"
@@ -235,23 +238,23 @@ class UserSettingsService:
             AlertState object if found, None otherwise.
         """
         try:
-            async with self.db.connection.cursor() as cursor:
-                await cursor.execute("SELECT * FROM alert_states WHERE chat_id = ?", (chat_id,))
-                row = await cursor.fetchone()
+            row = await self.db.fetch_one(
+                "SELECT * FROM alert_states WHERE chat_id = :chat_id",
+                {"chat_id": chat_id},
+            )
+            if row is None:
+                return None
 
-                if row is None:
-                    return None
-
-                return AlertState(
-                    chat_id=row["chat_id"],
-                    current_state=row["current_state"],
-                    last_alert_time=(
-                        datetime.fromisoformat(row["last_alert_time"])
-                        if row["last_alert_time"]
-                        else None
-                    ),
-                    last_alert_type=row["last_alert_type"],
-                )
+            return AlertState(
+                chat_id=row["chat_id"],
+                current_state=row["current_state"],
+                last_alert_time=(
+                    datetime.fromisoformat(row["last_alert_time"])
+                    if row["last_alert_time"]
+                    else None
+                ),
+                last_alert_type=row["last_alert_type"],
+            )
         except Exception as e:
             logger.error(f"Error getting alert state for user {chat_id}: {e}")
             raise
@@ -263,23 +266,20 @@ class UserSettingsService:
             List of all User objects.
         """
         try:
-            async with self.db.connection.cursor() as cursor:
-                await cursor.execute("SELECT * FROM users")
-                rows = await cursor.fetchall()
-
-                users = []
-                for row in rows:
-                    users.append(
-                        User(
-                            chat_id=row["chat_id"],
-                            humidity_min=row["humidity_min"],
-                            humidity_max=row["humidity_max"],
-                            created_at=datetime.fromisoformat(row["created_at"]),
-                            updated_at=datetime.fromisoformat(row["updated_at"]),
-                        )
+            rows = await self.db.fetch_all("SELECT * FROM users")
+            users = []
+            for row in rows:
+                users.append(
+                    User(
+                        chat_id=row["chat_id"],
+                        humidity_min=row["humidity_min"],
+                        humidity_max=row["humidity_max"],
+                        created_at=datetime.fromisoformat(row["created_at"]),
+                        updated_at=datetime.fromisoformat(row["updated_at"]),
                     )
+                )
 
-                return users
+            return users
         except Exception as e:
             logger.error(f"Error getting all users: {e}")
             raise

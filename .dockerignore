@@ -1,0 +1,10 @@
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.git
+.github
+.vscode
+htmlcov
+__pycache__
+*.pyc
+.coverage

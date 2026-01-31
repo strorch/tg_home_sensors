@@ -1,5 +1,6 @@
 """Integration tests for settings command handlers."""
 
+import os
 import pytest
 from unittest.mock import AsyncMock, patch
 from telegram import Update, User as TelegramUser
@@ -21,8 +22,14 @@ def mock_rate_limit(seconds=3):
 
 async def create_test_db(tmp_path):
     """Helper to create database with test user."""
-    db = Database(str(tmp_path / "test.db"))
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        pytest.skip("DATABASE_URL not set for PostgreSQL tests")
+
+    db = Database(database_url)
     await db.connect()
+    await db.execute("DELETE FROM alert_states")
+    await db.execute("DELETE FROM users")
     user_service = UserSettingsService(db)
     await user_service.create_or_update_user(chat_id=12345, humidity_min=40.0, humidity_max=60.0)
     return db, user_service
