@@ -5,20 +5,18 @@ networks:
 services:
   bot:
     build: .
-    depends_on:
-      db:
-        condition: service_healthy
     volumes:
       - ./:/app
     env_file:
       - .env
-    command: sleep 1d
+        #command: sleep 1d
     networks:
       - bot-network
+    restart: unless-stopped
     # environment:
       # DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/tg_home_sensors
     # restart: unless-stopped
     # Uncomment and adjust for Arduino USB device passthrough
-    # devices:
-    #   - "${SERIAL_PORT}:${SERIAL_PORT}"
+    devices:
+      - "${SERIAL_PORT}:${SERIAL_PORT}"
 
