@@ -106,7 +106,8 @@ sudo usermod -a -G dialout $USER
 **Arduino not sending data**:
 - Check serial monitor in Arduino IDE first
 - Verify baud rate matches (9600)
-- Confirm Arduino is sending the exact format: "Humidity: XX.XX%  DHT Temp: XX.XXC  LM35: XX.XXC  Therm: XX.XXC"
+- Confirm Arduino is sending valid JSON per line with required keys:
+  `humidity`, `dht_temperature`, `lm35_temperature`, `thermistor_temperature`
 
 **Bot not responding**:
 - Check bot token is correct
@@ -254,9 +255,9 @@ You'll automatically receive messages when:
 
 ### Expected Data Format
 
-Your Arduino must send data in this exact format:
+Your Arduino must send one JSON object per line:
 ```
-Humidity: 56.00%  DHT Temp: 23.40C  LM35: 24.93C  Therm: 22.73C
+{"humidity":56.00,"dht_temperature":23.40,"lm35_temperature":24.93,"thermistor_temperature":22.73}
 ```
 
 ### Sample Arduino Code
@@ -286,16 +287,21 @@ void loop() {
   int thermistorReading = analogRead(THERMISTOR_PIN);
   float thermistorTemp = /* your thermistor calculation */;
   
-  // IMPORTANT: Must match this exact format
-  Serial.print("Humidity: ");
-  Serial.print(humidity, 2);
-  Serial.print("%  DHT Temp: ");
-  Serial.print(dhtTemp, 2);
-  Serial.print("C  LM35: ");
-  Serial.print(lm35Temp, 2);
-  Serial.print("C  Therm: ");
-  Serial.print(thermistorTemp, 2);
-  Serial.println("C");
+  // IMPORTANT: Build JSON once, then write it as a single line
+  char payload[128];
+  int written = snprintf(
+    payload,
+    sizeof(payload),
+    "{\"humidity\":%.2f,\"dht_temperature\":%.2f,\"lm35_temperature\":%.2f,\"thermistor_temperature\":%.2f}",
+    humidity,
+    dhtTemp,
+    lm35Temp,
+    thermistorTemp
+  );
+
+  if (written > 0 && written < (int)sizeof(payload)) {
+    Serial.println(payload);
+  }
   
   delay(1000);  // Send every second
 }

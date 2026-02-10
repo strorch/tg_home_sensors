@@ -28,7 +28,8 @@ async def test_serial_reader_read_data():
     with patch("serial.Serial") as mock_serial:
         mock_instance = MagicMock()
         mock_instance.readline.return_value = (
-            b"Humidity: 56.00%  DHT Temp: 23.40C  LM35: 24.93C  Therm: 22.73C\n"
+            b'{"humidity":56.00,"dht_temperature":23.40,"lm35_temperature":24.93,'
+            b'"thermistor_temperature":22.73}\n'
         )
         mock_serial.return_value = mock_instance
 
@@ -101,7 +102,8 @@ async def test_serial_reader_get_latest_reading():
     with patch("serial.Serial") as mock_serial:
         mock_instance = MagicMock()
         mock_instance.readline.return_value = (
-            b"Humidity: 56.00%  DHT Temp: 23.40C  LM35: 24.93C  Therm: 22.73C\n"
+            b'{"humidity":56.00,"dht_temperature":23.40,"lm35_temperature":24.93,'
+            b'"thermistor_temperature":22.73}\n'
         )
         mock_serial.return_value = mock_instance
 

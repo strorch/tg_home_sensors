@@ -11,7 +11,7 @@ const int ThermistorPin = A1;
 
 float R1 = 10000.0;
 int Vo;
-float logR2, R2, T, Tc;
+float logR2, R2, T;
 
 float c1 = 1.009249522e-03;
 float c2 = 2.378405444e-04;
@@ -24,55 +24,70 @@ void setup() {
   dht.begin();
 }
 
-void print_dht() {
-  float humidity = dht.readHumidity();
-  float temperature = dht.readTemperature();
+bool read_dht(float &humidity, float &temperature) {
+  humidity = dht.readHumidity();
+  temperature = dht.readTemperature();
 
   if (isnan(humidity) || isnan(temperature)) {
-    Serial.print("DHT: read fail  ");
-    return;
+    return false;
   }
 
-  Serial.print("Humidity: ");
-  Serial.print(humidity);
-  Serial.print("%  DHT Temp: ");
-  Serial.print(temperature);
-  Serial.print("C  ");
+  return true;
 }
 
-void print_adc() {
+bool read_lm35(float &temperature) {
   int adcVal = analogRead(PIN_LM35);
   float milliVolt = adcVal * (ADC_VREF_mV / ADC_RESOLUTION);
-  float tempC = milliVolt / 10.0;
-
-  Serial.print("LM35: ");
-  Serial.print(tempC);
-  Serial.print("C  ");
+  temperature = milliVolt / 10.0;
+  return true;
 }
 
-void print_thermistor() {
+bool read_thermistor(float &temperature) {
   Vo = analogRead(ThermistorPin);
 
-  if (Vo <= 0) { Serial.print("Therm: ADC=0"); return; }
-  if (Vo >= 1023) { Serial.print("Therm: ADC=1023"); return; }
+  if (Vo <= 0 || Vo >= 1023) {
+    return false;
+  }
 
   // This assumes: VCC--R1--(ADC)--NTC--GND
   R2 = R1 * (1023.0 / (float)Vo - 1.0);
 
   logR2 = log(R2);
   T = 1.0 / (c1 + c2*logR2 + c3*logR2*logR2*logR2);
-  Tc = T - 273.15;
+  temperature = T - 273.15;
+  return true;
+}
 
-  Serial.print("Therm: ");
-  Serial.print(Tc);
-  Serial.print("C");
+void print_json_reading(float humidity, float dhtTemp, float lm35Temp, float thermistorTemp) {
+  char payload[128];
+  int written = snprintf(
+    payload,
+    sizeof(payload),
+    "{\"humidity\":%.2f,\"dht_temperature\":%.2f,\"lm35_temperature\":%.2f,\"thermistor_temperature\":%.2f}",
+    humidity,
+    dhtTemp,
+    lm35Temp,
+    thermistorTemp
+  );
+
+  if (written > 0 && written < (int)sizeof(payload)) {
+    Serial.println(payload);
+  }
 }
 
 void loop() {
-  print_dht();
-  print_adc();
-  print_thermistor();
-  Serial.println();
+  float humidity;
+  float dhtTemp;
+  float lm35Temp;
+  float thermistorTemp;
+
+  bool hasDht = read_dht(humidity, dhtTemp);
+  bool hasLm35 = read_lm35(lm35Temp);
+  bool hasThermistor = read_thermistor(thermistorTemp);
+
+  if (hasDht && hasLm35 && hasThermistor) {
+    print_json_reading(humidity, dhtTemp, lm35Temp, thermistorTemp);
+  }
+
   delay(2000);
 }
-

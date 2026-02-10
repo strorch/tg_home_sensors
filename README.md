@@ -57,7 +57,7 @@ Telegram bot that monitors Arduino sensor data via serial connection, providing 
 
 Your Arduino must send data in this format every second:
 ```
-Humidity: 56.00%  DHT Temp: 23.40C  LM35: 24.93C  Therm: 22.73C
+{"humidity":56.00,"dht_temperature":23.40,"lm35_temperature":24.93,"thermistor_temperature":22.73}
 ```
 
 Example Arduino code is provided in the [Quickstart Guide](specs/001-arduino-sensor-monitoring/quickstart.md).
