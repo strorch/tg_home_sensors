@@ -17,6 +17,6 @@ services:
       # DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/tg_home_sensors
     # restart: unless-stopped
     # Uncomment and adjust for Arduino USB device passthrough
-    devices:
-      - "${SERIAL_PORT}:${SERIAL_PORT}"
+    # devices:
+      # - "${SERIAL_PORT}:${SERIAL_PORT}"
 

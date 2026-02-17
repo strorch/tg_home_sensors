@@ -8,7 +8,6 @@ COPY pyproject.toml ./
 RUN uv sync --no-dev
 
 COPY src ./src
-COPY main.py README.md ./
 
 ENV PYTHONUNBUFFERED=1
 
