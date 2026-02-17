@@ -2,12 +2,14 @@
 
 import asyncio
 import logging
+from datetime import datetime, timedelta, timezone
 from telegram.ext import Application, CommandHandler
 
 from src.config import load_config
 from src.bot.services.database import Database
 from src.bot.services.serial_reader import SerialReaderService
 from src.bot.services.user_settings import UserSettingsService
+from src.bot.services.sensor_history import SensorHistoryService
 from src.bot.services.alert_manager import AlertManager
 from src.bot.utils.logger import setup_logging
 from src.bot.handlers.start import start_handler, help_handler
@@ -50,6 +52,8 @@ async def monitoring_loop(
     serial_service: SerialReaderService,
     alert_service: AlertManager,
     user_service: UserSettingsService,
+    history_service: SensorHistoryService,
+    history_retention_days: int,
     bot,
 ) -> None:
     """Background task to continuously monitor sensors and send alerts.
@@ -58,10 +62,14 @@ async def monitoring_loop(
         serial_service: Serial reader service.
         alert_service: Alert manager service.
         user_service: User settings service.
+        history_service: Sensor history persistence service.
+        history_retention_days: Retention window in days for persisted readings.
         bot: Telegram bot instance for connection notifications.
     """
     logger.info("Starting monitoring loop")
     was_connected = serial_service.is_connected()
+
+    next_purge_time = datetime.now(timezone.utc) + timedelta(hours=1)
 
     while True:
         try:
@@ -89,6 +97,11 @@ async def monitoring_loop(
                 was_connected = False
 
             if reading is not None:
+                try:
+                    await history_service.insert_reading(reading)
+                except Exception as e:
+                    logger.error(f"Failed to persist sensor reading: {e}", exc_info=True)
+
                 # Get all registered users
                 users = await user_service.get_all_users()
 
@@ -109,6 +122,18 @@ async def monitoring_loop(
                             "✅ Arduino connection restored!\n\nSensor monitoring resumed.",
                         )
                         was_connected = True
+
+            now = datetime.now(timezone.utc)
+            if now >= next_purge_time:
+                try:
+                    deleted = await history_service.purge_older_than(history_retention_days)
+                    logger.info(
+                        "Sensor history retention cleanup completed: "
+                        f"deleted={deleted}, days={history_retention_days}"
+                    )
+                except Exception as e:
+                    logger.error(f"Sensor history retention cleanup failed: {e}", exc_info=True)
+                next_purge_time = now + timedelta(hours=1)
 
             # Wait before next reading (Arduino sends every second)
             await asyncio.sleep(1)
@@ -145,6 +170,7 @@ async def main() -> None:
 
     # Initialize services
     user_settings_module.user_settings_service = UserSettingsService(database)
+    sensor_history_service = SensorHistoryService(database)
     serial_reader_module.serial_reader_service = SerialReaderService(
         port=config.serial_port, baud_rate=config.serial_baud_rate
     )
@@ -185,6 +211,8 @@ async def main() -> None:
                 serial_reader_module.serial_reader_service,
                 alert_manager_module.alert_manager,
                 user_settings_module.user_settings_service,
+                sensor_history_service,
+                config.mcp_max_history_days,
                 app.bot,
             )
         )

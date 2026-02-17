@@ -9,6 +9,7 @@ Telegram bot that monitors Arduino sensor data via serial connection, providing 
 - ⚙️ **Customizable**: Configure min/max humidity thresholds via bot commands
 - 🔄 **Auto-Reconnect**: Gracefully handles Arduino disconnections with exponential backoff
 - 🕒 **Smart Cooldown**: 5-minute alert cooldown prevents notification spam
+- 🤖 **MCP Access**: Expose sensor data/tools to LLM clients over Streamable HTTP
 
 ## Quick Start
 
@@ -53,6 +54,47 @@ Telegram bot that monitors Arduino sensor data via serial connection, providing 
    - Send `/start` to initialize
    - Send `/sensors` to get readings
 
+### MCP Server (for LLM clients)
+
+Run MCP as a separate process that reads from PostgreSQL while the bot owns the serial port.
+
+1. Set MCP env vars in `.env`:
+   ```bash
+   MCP_ENABLED=true
+   MCP_HOST=127.0.0.1
+   MCP_PORT=8081
+   MCP_API_KEY=your-long-random-secret
+   MCP_MAX_HISTORY_DAYS=7
+   ```
+
+2. Start the MCP server:
+   ```bash
+   uv run python -m src.mcp.main
+   ```
+
+3. Configure your MCP client endpoint:
+   - URL: `http://127.0.0.1:8081/mcp`
+   - Header: `Authorization: Bearer <MCP_API_KEY>`
+
+4. Quick connectivity checks:
+   ```bash
+   # SSE handshake (GET requires Accept: text/event-stream)
+   curl -i -N \
+     -H "Authorization: Bearer $MCP_API_KEY" \
+     -H "Accept: text/event-stream" \
+     http://127.0.0.1:8081/mcp
+   ```
+
+   Notes:
+   - `GET /mcp` without `Accept: text/event-stream` returns `406 Not Acceptable`.
+   - If you run via Docker Compose, `mcp-proxy` (nginx) handles browser CORS preflight `OPTIONS` and forwards MCP traffic to the `mcp` container.
+
+MCP tools:
+- `get_current_reading(chat_id)`
+- `get_recent_readings(chat_id, minutes=60, limit=300)`
+- `set_humidity_min(chat_id, value)`
+- `set_humidity_max(chat_id, value)`
+
 ### Arduino Data Format
 
 Your Arduino must send data in this format every second:
@@ -80,6 +122,11 @@ Example Arduino code is provided in the [Quickstart Guide](specs/001-arduino-sen
 uv run pytest --cov=src
 ```
 
+MCP-focused tests:
+```bash
+uv run pytest tests/unit/test_mcp_auth.py tests/unit/test_mcp_tools.py tests/integration/test_mcp_server.py
+```
+
 ### Lint & Format
 ```bash
 uv run ruff check .
@@ -93,11 +140,13 @@ uv run mypy src/
 
 ### Docker (PostgreSQL)
 ```bash
-docker compose up --build
+docker compose -f docker-compose.yml -f docker-compose.db.yml up --build
 ```
 
 Notes:
-- The container uses PostgreSQL via `DATABASE_URL` in `docker-compose.yml`.
+- `docker-compose.yml` runs `bot`, `mcp`, and `mcp-proxy` (nginx).
+- `docker-compose.db.yml` adds PostgreSQL.
+- MCP is exposed through nginx at `http://localhost:${MCP_PORT:-8081}/mcp`.
 - If you need Arduino access, uncomment the `devices` mapping and set `SERIAL_PORT`.
 
 ### VS Code Dev Container

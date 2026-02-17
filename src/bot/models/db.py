@@ -1,6 +1,6 @@
 """SQLAlchemy table metadata."""
 
-from sqlalchemy import CheckConstraint, Column, ForeignKey, MetaData, Table, Text
+from sqlalchemy import CheckConstraint, Column, ForeignKey, Index, MetaData, Table, Text
 from sqlalchemy.dialects.postgresql import BIGINT, DOUBLE_PRECISION
 
 
@@ -29,3 +29,16 @@ alert_states = Table(
     CheckConstraint("current_state IN ('normal', 'high_humidity', 'low_humidity')"),
     CheckConstraint("last_alert_type IN ('high', 'low') OR last_alert_type IS NULL"),
 )
+
+sensor_readings = Table(
+    "sensor_readings",
+    metadata,
+    Column("id", BIGINT, primary_key=True, autoincrement=True),
+    Column("recorded_at", Text, nullable=False),
+    Column("humidity", DOUBLE_PRECISION, nullable=False),
+    Column("dht_temperature", DOUBLE_PRECISION, nullable=False),
+    Column("lm35_temperature", DOUBLE_PRECISION, nullable=False),
+    Column("thermistor_temperature", DOUBLE_PRECISION, nullable=False),
+)
+
+Index("ix_sensor_readings_recorded_at", sensor_readings.c.recorded_at)

@@ -29,6 +29,18 @@ class Config(BaseSettings):
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
 
+    # MCP Server
+    mcp_enabled: bool = Field(default=False, description="Enable MCP server entry point")
+    mcp_host: str = Field(default="127.0.0.1", description="MCP server bind host")
+    mcp_port: int = Field(default=8081, ge=1, le=65535, description="MCP server bind port")
+    mcp_api_key: str | None = Field(default=None, description="Bearer token for MCP API access")
+    mcp_max_history_days: int = Field(
+        default=7,
+        ge=1,
+        le=365,
+        description="Sensor history retention window in days",
+    )
+
     # Defaults
     default_humidity_min: float = Field(default=40.0, ge=0.0, le=100.0)
     default_humidity_max: float = Field(default=60.0, ge=0.0, le=100.0)

@@ -33,6 +33,10 @@ async def test_database_schema_creation() -> None:
     assert alert_states is not None
     assert alert_states["name"] == "alert_states"
 
+    sensor_readings = await db.fetch_one("SELECT to_regclass('public.sensor_readings') AS name")
+    assert sensor_readings is not None
+    assert sensor_readings["name"] == "sensor_readings"
+
     await db.close()
 
 
