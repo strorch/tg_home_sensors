@@ -39,11 +39,13 @@ def tool_service(mock_user: User) -> SensorMCPToolService:
 async def test_get_current_reading_no_data(tool_service: SensorMCPToolService) -> None:
     tool_service.sensor_history_service.get_latest.return_value = None
 
-    result = await tool_service.get_current_reading(chat_id=12345)
+    result = await tool_service.get_current_reading()
 
     assert result["status"] == "no_data"
     assert result["reading"] is None
     assert result["is_stale"] is True
+    assert result["thresholds"] == {"humidity_min": 40.0, "humidity_max": 60.0}
+    tool_service.user_settings_service.get_user.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -57,11 +59,13 @@ async def test_get_current_reading_stale(tool_service: SensorMCPToolService) -> 
     )
     tool_service.sensor_history_service.get_latest.return_value = old_reading
 
-    result = await tool_service.get_current_reading(chat_id=12345)
+    result = await tool_service.get_current_reading()
 
     assert result["status"] == "stale"
     assert result["is_stale"] is True
     assert result["age_seconds"] >= 30
+    assert result["thresholds"] == {"humidity_min": 40.0, "humidity_max": 60.0}
+    tool_service.user_settings_service.get_user.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -84,12 +88,14 @@ async def test_get_recent_readings_summary(tool_service: SensorMCPToolService) -
     ]
     tool_service.sensor_history_service.get_recent.return_value = readings
 
-    result = await tool_service.get_recent_readings(chat_id=12345, minutes=60, limit=100)
+    result = await tool_service.get_recent_readings(minutes=60, limit=100)
 
     assert result["summary"]["count"] == 2
     assert result["summary"]["avg_humidity"] == 60.0
     assert result["summary"]["min_humidity"] == 55.0
     assert result["summary"]["max_humidity"] == 65.0
+    assert result["thresholds"] == {"humidity_min": 40.0, "humidity_max": 60.0}
+    tool_service.user_settings_service.get_user.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -117,4 +123,4 @@ async def test_set_humidity_max_validates_range(tool_service: SensorMCPToolServi
 @pytest.mark.asyncio
 async def test_get_recent_readings_validates_window(tool_service: SensorMCPToolService) -> None:
     with pytest.raises(ValueError, match="minutes"):
-        await tool_service.get_recent_readings(chat_id=12345, minutes=0, limit=10)
+        await tool_service.get_recent_readings(minutes=0, limit=10)

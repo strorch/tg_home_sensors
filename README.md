@@ -90,8 +90,8 @@ Run MCP as a separate process that reads from PostgreSQL while the bot owns the 
    - If you run via Docker Compose, `mcp-proxy` (nginx) handles browser CORS preflight `OPTIONS` and forwards MCP traffic to the `mcp` container.
 
 MCP tools:
-- `get_current_reading(chat_id)`
-- `get_recent_readings(chat_id, minutes=60, limit=300)`
+- `get_current_reading()`
+- `get_recent_readings(minutes=60, limit=300)`
 - `set_humidity_min(chat_id, value)`
 - `set_humidity_max(chat_id, value)`
 
