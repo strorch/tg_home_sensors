@@ -9,7 +9,7 @@ services:
       - ./:/app
     env_file:
       - .env
-    command: sleep 1d
+        #command: sleep 1d
     networks:
       - bot-network
     restart: unless-stopped
