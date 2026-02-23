@@ -4,6 +4,7 @@ import os
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
+from telegram.error import Forbidden
 
 from src.bot.models.sensor_reading import SensorReading
 
@@ -211,5 +212,37 @@ async def test_multi_user_alert_isolation(mock_telegram_context, tmp_path):
 
     assert user1_calls == 1  # User1 got alert
     assert user2_calls == 0  # User2 did not get alert
+
+    await db.close()
+
+
+@pytest.mark.asyncio
+async def test_blocked_user_removed_stops_retry_spam(mock_telegram_context, tmp_path):
+    """Test blocked users are removed and not retried on next reading."""
+    from src.bot.services.user_settings import UserSettingsService
+    from src.bot.services.alert_manager import AlertManager
+
+    db = await _setup_database()
+    user_service = UserSettingsService(db)
+    await user_service.create_user(chat_id=12345, humidity_min=40.0, humidity_max=60.0)
+
+    mock_bot = AsyncMock()
+    mock_bot.send_message.side_effect = Forbidden("Forbidden: bot was blocked by the user")
+    alert_manager = AlertManager(database=db, bot=mock_bot)
+
+    reading = SensorReading(
+        humidity=72.5,
+        dht_temperature=28.4,
+        lm35_temperature=29.1,
+        thermistor_temperature=27.8,
+        timestamp=datetime.now(timezone.utc),
+    )
+
+    await alert_manager.process_reading(reading, chat_id=12345)
+    await alert_manager.process_reading(reading, chat_id=12345)
+
+    assert mock_bot.send_message.call_count == 1
+    user_row = await db.fetch_one("SELECT * FROM users WHERE chat_id = :chat_id", {"chat_id": 12345})
+    assert user_row is None
 
     await db.close()

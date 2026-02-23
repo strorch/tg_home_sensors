@@ -3,6 +3,7 @@
 import pytest
 from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, MagicMock
+from telegram.error import Forbidden
 
 from src.bot.services.alert_manager import AlertManager
 from src.bot.models.sensor_reading import SensorReading
@@ -224,3 +225,49 @@ async def test_format_recovery_notification(alert_manager, mock_user):
     assert "NORMAL" in message or "BACK TO NORMAL" in message
     assert "52.0%" in message or "52.00%" in message
     assert "40.0%" in message and "60.0%" in message  # Range
+
+
+@pytest.mark.asyncio
+async def test_blocked_user_is_removed_and_not_retried() -> None:
+    """Test blocked user is removed to prevent repeated send failures."""
+    mock_db = MagicMock()
+    mock_db.fetch_one = AsyncMock(
+        side_effect=[
+            {
+                "chat_id": 12345,
+                "humidity_min": 40.0,
+                "humidity_max": 60.0,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            {
+                "chat_id": 12345,
+                "current_state": "normal",
+                "last_alert_time": None,
+                "last_alert_type": None,
+            },
+            None,
+        ]
+    )
+    mock_db.execute = AsyncMock()
+
+    mock_bot = MagicMock()
+    mock_bot.send_message = AsyncMock(side_effect=Forbidden("Forbidden: bot was blocked by the user"))
+
+    manager = AlertManager(database=mock_db, bot=mock_bot)
+    reading = SensorReading(
+        humidity=75.0,
+        dht_temperature=28.4,
+        lm35_temperature=29.1,
+        thermistor_temperature=27.8,
+        timestamp=datetime.now(timezone.utc),
+    )
+
+    await manager.process_reading(reading, chat_id=12345)
+    await manager.process_reading(reading, chat_id=12345)
+
+    mock_bot.send_message.assert_called_once()
+    mock_db.execute.assert_called_once_with(
+        "DELETE FROM users WHERE chat_id = :chat_id",
+        {"chat_id": 12345},
+    )

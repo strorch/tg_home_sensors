@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Literal, Optional
 from telegram import Bot
+from telegram.error import Forbidden
 
 from src.bot.models.sensor_reading import SensorReading
 from src.bot.models.user import User
@@ -173,6 +174,26 @@ class AlertManager:
             logger.error(f"Error updating alert state for user {chat_id}: {e}")
             raise
 
+    async def _handle_blocked_user(self, chat_id: int) -> None:
+        """Remove blocked user to stop repeated failed send attempts."""
+        await self.db.execute(
+            "DELETE FROM users WHERE chat_id = :chat_id",
+            {"chat_id": chat_id},
+        )
+        logger.warning(
+            "User %s blocked the bot; removed user from monitoring to prevent retry spam",
+            chat_id,
+        )
+
+    async def _send_message(self, chat_id: int, message: str) -> bool:
+        """Send a message and handle blocked users gracefully."""
+        try:
+            await self.bot.send_message(chat_id=chat_id, text=message)
+            return True
+        except Forbidden:
+            await self._handle_blocked_user(chat_id)
+            return False
+
     async def process_reading(self, reading: SensorReading, chat_id: int) -> None:
         """Process sensor reading and send alerts if needed.
 
@@ -226,22 +247,22 @@ class AlertManager:
                 # Format and send appropriate message
                 if new_state == "high_humidity":
                     message = self.format_high_humidity_alert(reading, user)
-                    await self.bot.send_message(chat_id=chat_id, text=message)
-                    await self.update_alert_state(chat_id, new_state, "high")
-                    logger.info(f"Sent high humidity alert to user {chat_id}")
+                    if await self._send_message(chat_id, message):
+                        await self.update_alert_state(chat_id, new_state, "high")
+                        logger.info(f"Sent high humidity alert to user {chat_id}")
 
                 elif new_state == "low_humidity":
                     message = self.format_low_humidity_alert(reading, user)
-                    await self.bot.send_message(chat_id=chat_id, text=message)
-                    await self.update_alert_state(chat_id, new_state, "low")
-                    logger.info(f"Sent low humidity alert to user {chat_id}")
+                    if await self._send_message(chat_id, message):
+                        await self.update_alert_state(chat_id, new_state, "low")
+                        logger.info(f"Sent low humidity alert to user {chat_id}")
 
                 elif new_state == "normal" and alert_state.current_state != "normal":
                     # Recovery notification
                     message = self.format_recovery_notification(reading, user)
-                    await self.bot.send_message(chat_id=chat_id, text=message)
-                    await self.update_alert_state(chat_id, new_state, None)
-                    logger.info(f"Sent recovery notification to user {chat_id}")
+                    if await self._send_message(chat_id, message):
+                        await self.update_alert_state(chat_id, new_state, None)
+                        logger.info(f"Sent recovery notification to user {chat_id}")
 
         except Exception as e:
             logger.error(f"Error processing reading for user {chat_id}: {e}", exc_info=True)
