@@ -43,6 +43,20 @@ async def test_read_complete_grouped_message(sensor_metrics: SensorMetrics) -> N
 
 
 @pytest.mark.asyncio
+async def test_read_scd41_text_message(sensor_metrics: SensorMetrics) -> None:
+    reader = make_reader(sensor_metrics)
+    reader._serial = MagicMock(is_open=True)
+    reader._serial.readline.return_value = (
+        b"CO2: 1522 ppm | Temperature: 31.0 C | Humidity: 35.4 %\r\n"
+    )
+
+    message = await reader.read_message()
+
+    assert isinstance(message, SensorReading)
+    assert message.scd41.co2_ppm == 1522
+
+
+@pytest.mark.asyncio
 async def test_read_status_does_not_count_parse_error(
     registry: CollectorRegistry,
     sensor_metrics: SensorMetrics,

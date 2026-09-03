@@ -34,6 +34,17 @@ The sketch emits one compact JSON object every five seconds at 115200 baud:
 {"dht":{"temperature_celsius":23.4,"humidity_percent":48.1},"scd41":{"co2_ppm":812,"temperature_celsius":24.1,"humidity_percent":46.8}}
 ```
 
+For compatibility with the standalone SCD41 monitor firmware, the exporter also accepts its
+115200-baud text output:
+
+```text
+CO2: 1522 ppm | Temperature: 31.0 C | Humidity: 35.4 %
+```
+
+This format exports the SCD41 series only; DHT series remain unavailable until grouped JSON is
+received. Its `SCD41 started` and `Waiting for measurement...` messages are treated as status
+messages rather than parse errors.
+
 Startup status is also valid JSON, for example `{"status":"started"}`. Unavailable measurements
 are emitted as `null`; the exporter still publishes every available value from the other sensor:
 
@@ -134,7 +145,8 @@ Good initial alert expressions are:
 home_sensor_co2_ppm{sensor="scd41"} > 1000
 home_sensor_temperature_celsius{sensor=~"dht|scd41"} < 10 or home_sensor_temperature_celsius{sensor=~"dht|scd41"} > 30
 home_sensor_humidity_percent{sensor=~"dht|scd41"} < 30 or home_sensor_humidity_percent{sensor=~"dht|scd41"} > 70
-time() - home_sensor_last_reading_timestamp_seconds > 30
+(time() - home_sensor_last_reading_timestamp_seconds > 30)
+and (home_sensor_last_reading_timestamp_seconds > 0)
 home_sensor_serial_connected == 0
 up{job="home-sensors"} == 0
 absent(home_sensor_co2_ppm{sensor="scd41"})

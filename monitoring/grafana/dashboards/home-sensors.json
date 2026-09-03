@@ -89,7 +89,7 @@
       "gridPos": {"h": 4, "w": 8, "x": 8, "y": 12},
       "id": 8,
       "options": {"colorMode": "value", "graphMode": "none", "textMode": "auto"},
-      "targets": [{"expr": "time() - home_sensor_last_reading_timestamp_seconds", "refId": "A"}],
+      "targets": [{"expr": "(time() - home_sensor_last_reading_timestamp_seconds) and (home_sensor_last_reading_timestamp_seconds > 0)", "refId": "A"}],
       "title": "Last reading age",
       "type": "stat"
     },

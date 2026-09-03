@@ -33,6 +33,10 @@ least one measurement is valid; unavailable Prometheus series are removed and MQ
 the null fields. Firmware status objects contain a non-empty `status` string. Invalid readings
 are discarded and counted. The exporter adds a UTC `observed_at` timestamp after validation.
 
+For deployed standalone SCD41 firmware, the exporter also accepts lines in the form
+`CO2: 1522 ppm | Temperature: 31.0 C | Humidity: 35.4 %`. These readings populate only the
+SCD41 measurements. Its startup and waiting lines are accepted as status messages.
+
 ## Operations
 
 The exporter reconnects to serial input with capped exponential backoff. Prometheus remains
