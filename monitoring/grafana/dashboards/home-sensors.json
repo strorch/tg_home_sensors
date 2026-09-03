@@ -104,7 +104,7 @@
       "type": "stat"
     }
   ],
-  "refresh": "5s",
+  "refresh": "1s",
   "schemaVersion": 41,
   "tags": ["arduino", "home", "sensors"],
   "templating": {"list": []},
