@@ -81,32 +81,43 @@ MQTT uses the same grouped structure and adds the exporter timestamp:
 Set `MQTT_ENABLED=false` when MQTT is not needed. An unavailable MQTT broker does not stop
 Prometheus collection.
 
-## Local Docker stack
+## Docker deployment
 
-The base stack starts the exporter, Prometheus, Grafana, and Mosquitto without requiring a
-serial device to exist:
+The default stack starts only the exporter and Mosquitto. This is the deployment used on the
+sensor host:
 
 ```bash
 cp .env.example .env
-docker compose up --build
+docker compose -f docker-compose.yml -f docker-compose.hardware.yml up -d --build
 ```
 
-Open:
+The hardware override passes the configured serial device through to the exporter. Without a
+serial device, start the same services using only the default file:
 
-- Grafana: `http://localhost:3000` (`admin` / `admin` by default)
-- Prometheus: `http://localhost:9090`
+```bash
+docker compose up -d --build
+```
+
+Useful endpoints are:
+
 - exporter metrics: `http://localhost:8000/metrics`
 - Mosquitto: `localhost:1883`
 
 `MQTT_HOST_PORT` changes the host-facing Mosquitto port without changing the broker port used
 inside the Compose network.
 
-The `Home sensors` Grafana dashboard and Prometheus data source are provisioned automatically.
-To give the exporter access to a Linux serial device, use the hardware override:
+For a self-contained local stack, add the monitoring file. This starts Prometheus and Grafana
+alongside the default services and provisions the `Home sensors` dashboard and data source:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.hardware.yml up --build
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.monitoring.yml \
+  up -d --build
 ```
+
+Open Prometheus at `http://localhost:9090` and Grafana at `http://localhost:3000`
+(`admin` / `admin` by default).
 
 The Docker stack enables MQTT by default. To inspect its payloads:
 
@@ -163,4 +174,6 @@ uv run ruff format --check .
 uv run mypy src/
 uv run pytest --cov=src
 docker compose config --quiet
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml config --quiet
+docker compose -f docker-compose.yml -f docker-compose.hardware.yml config --quiet
 ```
