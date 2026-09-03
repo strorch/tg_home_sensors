@@ -1,72 +1,52 @@
-"""Configuration management using pydantic-settings."""
+"""Application configuration loaded from environment variables."""
 
 import os
 from pathlib import Path
-from pydantic import Field
+from typing import Self
+
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Config(BaseSettings):
-    """Application configuration loaded from environment variables."""
+    """Configuration for serial input, metrics, and optional MQTT output."""
 
-    model_config = SettingsConfigDict(
-        env_file=None,
-        case_sensitive=False,
-    )
+    model_config = SettingsConfigDict(env_file=None, case_sensitive=False)
 
-    # Telegram Bot
-    telegram_bot_token: str = Field(..., description="Telegram bot token from @BotFather")
+    serial_port: str = Field(min_length=1)
+    serial_baud_rate: int = Field(default=115200, gt=0)
+    serial_timeout_seconds: float = Field(default=2.0, gt=0)
+    metrics_host: str = "0.0.0.0"
+    metrics_port: int = Field(default=8000, ge=1, le=65535)
+    log_level: str = "INFO"
+    mqtt_enabled: bool = False
+    mqtt_host: str | None = None
+    mqtt_port: int = Field(default=1883, ge=1, le=65535)
+    mqtt_topic: str = Field(default="home/sensors/environment", min_length=1)
+    mqtt_username: str | None = None
+    mqtt_password: str | None = None
+    mqtt_tls: bool = False
+    mqtt_client_id: str = Field(default="home-sensors-exporter", min_length=1)
 
-    # Serial Port
-    serial_port: str = Field(..., description="Arduino serial port path")
-    serial_baud_rate: int = Field(default=9600, description="Serial baud rate")
-
-    # Database
-    database_url: str = Field(
-        ..., description="PostgreSQL database URL (e.g., postgresql+asyncpg://...)"
-    )
-
-    # Logging
-    log_level: str = Field(default="INFO", description="Logging level")
-
-    # MCP Server
-    mcp_enabled: bool = Field(default=False, description="Enable MCP server entry point")
-    mcp_host: str = Field(default="127.0.0.1", description="MCP server bind host")
-    mcp_port: int = Field(default=8081, ge=1, le=65535, description="MCP server bind port")
-    mcp_api_key: str | None = Field(default=None, description="Bearer token for MCP API access")
-    mcp_max_history_days: int = Field(
-        default=7,
-        ge=1,
-        le=365,
-        description="Sensor history retention window in days",
-    )
-
-    # Defaults
-    default_humidity_min: float = Field(default=40.0, ge=0.0, le=100.0)
-    default_humidity_max: float = Field(default=60.0, ge=0.0, le=100.0)
-
-
-def load_config() -> Config:
-    """Load and validate configuration.
-
-    Raises:
-        ValidationError: If required config is missing or invalid.
-    """
-    if not os.getenv("PYTEST_CURRENT_TEST"):
-        _load_dotenv()
-    return Config()
+    @model_validator(mode="after")
+    def validate_mqtt(self) -> Self:
+        if self.mqtt_enabled and not self.mqtt_host:
+            raise ValueError("MQTT_HOST is required when MQTT_ENABLED is true")
+        return self
 
 
 def _load_dotenv() -> None:
-    dotenv_path = Path(".env")
-    if not dotenv_path.exists():
-        return
+    path = Path(".env")
+    if path.exists():
+        for line in path.read_text().splitlines():
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#") and "=" in stripped:
+                key, value = stripped.split("=", 1)
+                os.environ.setdefault(key.strip(), value.strip().strip("'\""))
 
-    for line in dotenv_path.read_text().splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in stripped:
-            continue
-        key, value = stripped.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip("'").strip('"')
-        os.environ.setdefault(key, value)
+
+def load_config() -> Config:
+    """Load local environment values and validate them."""
+    if not os.getenv("PYTEST_CURRENT_TEST"):
+        _load_dotenv()
+    return Config()  # type: ignore[call-arg]

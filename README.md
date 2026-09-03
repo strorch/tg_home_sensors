@@ -1,209 +1,147 @@
-# Arduino Home Sensors Bot 🌡️💧
+# Arduino home sensors exporter
 
-Telegram bot that monitors Arduino sensor data via serial connection, providing on-demand readings and automatic humidity threshold alerts.
+This project reads grouped JSON from an Arduino, exports every DHT and SCD41 value to
+Prometheus, and can publish the complete reading to MQTT. Grafana provides dashboards and
+alerting, including direct Telegram notifications.
 
-## Features
+The application Telegram bot, MCP server, database, LM35, and thermistor support have been
+removed.
 
-- 📊 **Query Sensors**: Get current readings (humidity + 3 temperature sensors) via `/sensors` command
-- 🚨 **Automatic Alerts**: Receive notifications when humidity exceeds your thresholds
-- ⚙️ **Customizable**: Configure min/max humidity thresholds via bot commands
-- 🔄 **Auto-Reconnect**: Gracefully handles Arduino disconnections with exponential backoff
-- 🕒 **Smart Cooldown**: 5-minute alert cooldown prevents notification spam
-- 🤖 **MCP Access**: Expose sensor data/tools to LLM clients over Streamable HTTP
+## Data flow
 
-## Quick Start
-
-### Prerequisites
-
-- Python 3.11 or higher
-- [uv package manager](https://github.com/astral-sh/uv)
-- Arduino connected via USB serial port
-- Telegram Bot Token (from [@BotFather](https://t.me/botfather))
-
-### Installation
-
-1. **Install dependencies**:
-   ```bash
-   uv sync
-   ```
-
-2. **Configure the bot**:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your Telegram token and serial port
-   ```
-
-3. **Find your Arduino serial port**:
-   ```bash
-   # macOS
-   ls /dev/cu.usbserial* /dev/cu.usbmodem*
-   
-   # Linux
-   ls /dev/ttyUSB* /dev/ttyACM*
-   
-   # Windows - check Device Manager → Ports (COM & LPT)
-   ```
-
-4. **Run the bot**:
-   ```bash
-   uv run python src/main.py
-   ```
-
-5. **Start chatting**:
-   - Open Telegram and find your bot
-   - Send `/start` to initialize
-   - Send `/sensors` to get readings
-
-### MCP Server (for LLM clients)
-
-Run MCP as a separate process that reads from PostgreSQL while the bot owns the serial port.
-
-1. Set MCP env vars in `.env`:
-   ```bash
-   MCP_ENABLED=true
-   MCP_HOST=127.0.0.1
-   MCP_PORT=8081
-   MCP_API_KEY=your-long-random-secret
-   MCP_MAX_HISTORY_DAYS=7
-   ```
-
-2. Start the MCP server:
-   ```bash
-   uv run python -m src.mcp.main
-   ```
-
-3. Configure your MCP client endpoint:
-   - URL: `http://127.0.0.1:8081/mcp`
-   - Header: `Authorization: Bearer <MCP_API_KEY>`
-
-4. Quick connectivity checks:
-   ```bash
-   # SSE handshake (GET requires Accept: text/event-stream)
-   curl -i -N \
-     -H "Authorization: Bearer $MCP_API_KEY" \
-     -H "Accept: text/event-stream" \
-     http://127.0.0.1:8081/mcp
-   ```
-
-   Notes:
-   - `GET /mcp` without `Accept: text/event-stream` returns `406 Not Acceptable`.
-   - If you run via Docker Compose, `mcp-proxy` (nginx) handles browser CORS preflight `OPTIONS` and forwards MCP traffic to the `mcp` container.
-
-MCP tools:
-- `get_current_reading()`
-- `get_recent_readings(minutes=60, limit=300)`
-- `set_humidity_min(chat_id, value)`
-- `set_humidity_max(chat_id, value)`
-
-### Arduino Data Format
-
-Your Arduino must send data in this format every second:
-```
-{"humidity":56.00,"dht_temperature":23.40,"lm35_temperature":24.93,"thermistor_temperature":22.73}
+```text
+DHT + SCD41 -> Arduino JSON -> serial exporter -> Prometheus -> Grafana -> Telegram alerts
+                                      |
+                                      +----------> MQTT (optional)
 ```
 
-Example Arduino code is provided in the [Quickstart Guide](specs/001-arduino-sensor-monitoring/quickstart.md).
+The exporter exposes:
 
-## Bot Commands
+| Sensor | Values |
+| --- | --- |
+| DHT | temperature in °C, relative humidity in % |
+| SCD41 | CO₂ in ppm, temperature in °C, relative humidity in % |
 
-| Command | Description |
-|---------|-------------|
-| `/start` | Initialize your account with default thresholds |
-| `/help` | Show help message |
-| `/sensors` or `/status` | Get current sensor readings |
-| `/settings` | View your humidity thresholds |
-| `/set_humidity_min <value>` | Set minimum humidity (0-100) |
-| `/set_humidity_max <value>` | Set maximum humidity (0-100) |
+## Arduino firmware
 
-## Development
+Flash [`sketch/sketch.ino`](sketch/sketch.ino). It expects a DHT11 data pin on digital pin 4
+and an SCD41 on the I²C bus. Install the Arduino libraries `DHT sensor library`,
+`Sensirion I2C SCD4x`, and their dependencies first.
 
-### Run Tests
+The sketch emits one compact JSON object every five seconds at 115200 baud:
+
+```json
+{"dht":{"temperature_celsius":23.4,"humidity_percent":48.1},"scd41":{"co2_ppm":812,"temperature_celsius":24.1,"humidity_percent":46.8}}
+```
+
+Startup and incomplete readings are also valid JSON, for example
+`{"status":"waiting_for_measurement"}`. A complete sample is exported only when both sensors
+have valid data.
+
+For an Arduino Uno, connect the SCD41 to `3.3V`, `GND`, `SDA/A4`, and `SCL/A5`. Leave the DHT
+connected on pin 4. The old LM35 and thermistor connections on `A0` and `A1` are no longer used.
+
+## Local Python run
+
 ```bash
-uv run pytest --cov=src
+cp .env.example .env
+uv sync
+uv run python -m src.main
 ```
 
-MCP-focused tests:
+Set `SERIAL_PORT` in `.env` to the Arduino port, such as `/dev/ttyACM0`. Useful endpoints and
+topics are:
+
+- Prometheus exposition: `http://localhost:8000/metrics`
+- MQTT topic: `home/sensors/environment` (retained, QoS 1)
+
+MQTT uses the same grouped structure and adds the exporter timestamp:
+
+```json
+{"dht":{"temperature_celsius":23.4,"humidity_percent":48.1},"scd41":{"co2_ppm":812,"temperature_celsius":24.1,"humidity_percent":46.8},"observed_at":"2026-09-02T12:00:00Z"}
+```
+
+Set `MQTT_ENABLED=false` when MQTT is not needed. An unavailable MQTT broker does not stop
+Prometheus collection.
+
+## Local Docker stack
+
+The base stack starts the exporter, Prometheus, Grafana, and Mosquitto without requiring a
+serial device to exist:
+
 ```bash
-uv run pytest tests/unit/test_mcp_auth.py tests/unit/test_mcp_tools.py tests/integration/test_mcp_server.py
+cp .env.example .env
+docker compose up --build
 ```
 
-### Lint & Format
+Open:
+
+- Grafana: `http://localhost:3000` (`admin` / `admin` by default)
+- Prometheus: `http://localhost:9090`
+- exporter metrics: `http://localhost:8000/metrics`
+- Mosquitto: `localhost:1883`
+
+`MQTT_HOST_PORT` changes the host-facing Mosquitto port without changing the broker port used
+inside the Compose network.
+
+The `Home sensors` Grafana dashboard and Prometheus data source are provisioned automatically.
+To give the exporter access to a Linux serial device, use the hardware override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.hardware.yml up --build
+```
+
+The Docker stack enables MQTT by default. To inspect its payloads:
+
+```bash
+docker compose exec mosquitto \
+  mosquitto_sub -h localhost -t home/sensors/environment -v
+```
+
+## Prometheus metrics
+
+| Metric | Labels | Meaning |
+| --- | --- | --- |
+| `home_sensor_temperature_celsius` | `sensor=dht|scd41` | both temperatures |
+| `home_sensor_humidity_percent` | `sensor=dht|scd41` | both humidity readings |
+| `home_sensor_co2_ppm` | `sensor=scd41` | SCD41 CO₂ concentration |
+| `home_sensor_last_reading_timestamp_seconds` | none | last complete reading time |
+| `home_sensor_serial_connected` | none | Arduino connection state |
+| `home_sensor_parse_errors_total` | none | rejected serial messages |
+| `home_sensor_read_errors_total` | none | serial I/O failures |
+| `home_sensor_mqtt_connected` | none | MQTT connection state |
+| `home_sensor_mqtt_publish_errors_total` | none | MQTT publication failures |
+
+## Grafana Telegram alerts
+
+Telegram delivery is owned entirely by Grafana; there is no Telegram code or token in the
+exporter.
+
+1. In Grafana, open **Alerts & IRM → Alerting → Notification configuration → Contact points**.
+2. Add a **Telegram** contact point using the bot API token and destination chat ID, then use
+   **Test** before saving.
+3. Create Grafana-managed alert rules from Prometheus queries and assign that contact point.
+
+Good initial alert expressions are:
+
+```promql
+home_sensor_co2_ppm{sensor="scd41"} > 1000
+home_sensor_temperature_celsius{sensor=~"dht|scd41"} < 10 or home_sensor_temperature_celsius{sensor=~"dht|scd41"} > 30
+home_sensor_humidity_percent{sensor=~"dht|scd41"} < 30 or home_sensor_humidity_percent{sensor=~"dht|scd41"} > 70
+time() - home_sensor_last_reading_timestamp_seconds > 30
+home_sensor_serial_connected == 0
+up{job="home-sensors"} == 0
+```
+
+Adjust thresholds and pending periods in Grafana for the room being monitored. Keep the bot
+token out of version control; enter it in Grafana's secured contact-point field.
+
+## Development checks
+
 ```bash
 uv run ruff check .
-uv run ruff format .
-```
-
-### Type Check
-```bash
+uv run ruff format --check .
 uv run mypy src/
+uv run pytest --cov=src
+docker compose config --quiet
 ```
-
-### Docker (PostgreSQL)
-```bash
-docker compose -f docker-compose.yml -f docker-compose.db.yml up --build
-```
-
-Notes:
-- `docker-compose.yml` runs `bot`, `mcp`, and `mcp-proxy` (nginx).
-- `docker-compose.db.yml` adds PostgreSQL.
-- MCP is exposed through nginx at `http://localhost:${MCP_PORT:-8081}/mcp`.
-- If you need Arduino access, uncomment the `devices` mapping and set `SERIAL_PORT`.
-
-### VS Code Dev Container
-- Open the repository in VS Code and choose **Reopen in Container**.
-- The dev container uses Docker Compose and the PostgreSQL service automatically.
-
-### Migrations (Alembic)
-```bash
-export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/tg_home_sensors
-uv run alembic upgrade head
-```
-
-## Troubleshooting
-
-### Permission Denied (Linux)
-Add your user to the dialout group:
-```bash
-sudo usermod -a -G dialout $USER
-# Log out and back in
-```
-
-### Arduino Not Sending Data
-Check serial monitor (9600 baud) to verify data format matches expected pattern.
-
-### Bot Not Responding
-- Verify `TELEGRAM_BOT_TOKEN` in `.env`
-- Check bot logs for errors
-- Ensure bot has been started with `/start` command
-
-## Project Structure
-
-```
-src/
-├── bot/
-│   ├── handlers/     # Telegram command handlers
-│   ├── services/     # Business logic (serial, alerts, settings)
-│   ├── models/       # Data models (SensorReading, User, AlertState)
-│   └── utils/        # Helper functions (rate limiting, logging)
-├── config.py         # Configuration management
-└── main.py           # Bot entry point
-
-tests/
-├── unit/             # Unit tests
-├── integration/      # Integration tests
-└── fixtures/         # Test fixtures
-```
-
-## Technical Details
-
-- **Language**: Python 3.11+
-- **Bot Framework**: python-telegram-bot v20+
-- **Serial I/O**: pyserial with asyncio
-- **Database**: PostgreSQL via SQLAlchemy (async)
-- **Testing**: pytest with 80%+ coverage target
-
-For detailed technical documentation, see [Implementation Plan](specs/001-arduino-sensor-monitoring/plan.md).
-
-## License
-
-See LICENSE file for details.

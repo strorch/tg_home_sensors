@@ -1,36 +1,88 @@
 networks:
-  bot-network:
+  sensors-network:
     driver: bridge
 
 services:
-  bot:
+  sensor-exporter:
     build: .
-    volumes:
-      - ./:/app
-    env_file:
-      - .env
-        #command: sleep 1d
-    networks:
-      - bot-network
-    restart: unless-stopped
-    # Uncomment and adjust for Arduino USB device passthrough
-    devices:
-      - "${SERIAL_PORT}:${SERIAL_PORT}"
-
-  mcp:
-    build: .
-    command: ["uv", "run", "python", "-m", "src.mcp.main"]
-    volumes:
-      - ./:/app
-    env_file:
-      - .env
     environment:
-      MCP_ENABLED: "true"
-      MCP_HOST: "0.0.0.0"
-      MCP_PORT: "8081"
-      MCP_API_KEY: 111111
-    expose:
-      - "8081"
+      SERIAL_PORT: ${SERIAL_PORT:-/dev/ttyACM0}
+      SERIAL_BAUD_RATE: ${SERIAL_BAUD_RATE:-115200}
+      METRICS_HOST: 0.0.0.0
+      METRICS_PORT: 8000
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      MQTT_ENABLED: ${MQTT_ENABLED:-true}
+      MQTT_HOST: ${MQTT_HOST:-mosquitto}
+      MQTT_PORT: ${MQTT_PORT:-1883}
+      MQTT_TOPIC: ${MQTT_TOPIC:-home/sensors/environment}
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      MQTT_TLS: ${MQTT_TLS:-false}
+    ports:
+      - "${METRICS_PORT:-8000}:8000"
     networks:
-      - bot-network
+      - sensors-network
+    depends_on:
+      mosquitto:
+        condition: service_started
     restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://localhost:8000/metrics')
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks:
+      - sensors-network
+    depends_on:
+      sensor-exporter:
+        condition: service_healthy
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    networks:
+      - sensors-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    volumes:
+      - ./monitoring/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+    ports:
+      - "${MQTT_HOST_PORT:-1883}:1883"
+    networks:
+      - sensors-network
+    restart: unless-stopped
+
+volumes:
+  grafana-data:
+  mosquitto-data:
+  prometheus-data:

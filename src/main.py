@@ -1,247 +1,56 @@
-"""Bot entry point."""
+"""Home sensor exporter entry point."""
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
-from telegram.ext import Application, CommandHandler
+import signal
 
-from src.config import load_config
-from src.bot.services.database import Database
-from src.bot.services.serial_reader import SerialReaderService
-from src.bot.services.user_settings import UserSettingsService
-from src.bot.services.sensor_history import SensorHistoryService
-from src.bot.services.alert_manager import AlertManager
-from src.bot.utils.logger import setup_logging
-from src.bot.handlers.start import start_handler, help_handler
-from src.bot.handlers.sensors import sensors_handler, status_handler
-from src.bot.handlers.settings import (
-    settings_handler,
-    set_humidity_min_handler,
-    set_humidity_max_handler,
-)
-
-# Import global service instances
-import src.bot.services.serial_reader as serial_reader_module
-import src.bot.services.user_settings as user_settings_module
-import src.bot.services.alert_manager as alert_manager_module
-
+from src.config import Config, load_config
+from src.sensors.exporter import SensorExporter
+from src.sensors.metrics import MetricsHttpServer, SensorMetrics
+from src.sensors.mqtt import MqttPublisher
+from src.sensors.serial_reader import SerialReader
 
 logger = logging.getLogger(__name__)
 
 
-async def notify_all_users(bot, user_service: UserSettingsService, message: str) -> None:
-    """Send notification message to all registered users.
-
-    Args:
-        bot: Telegram bot instance.
-        user_service: User settings service.
-        message: Message to send.
-    """
-    try:
-        users = await user_service.get_all_users()
-        for user in users:
-            try:
-                await bot.send_message(chat_id=user.chat_id, text=message)
-            except Exception as e:
-                logger.error(f"Failed to notify user {user.chat_id}: {e}")
-    except Exception as e:
-        logger.error(f"Failed to get users for notification: {e}")
-
-
-async def monitoring_loop(
-    serial_service: SerialReaderService,
-    alert_service: AlertManager,
-    user_service: UserSettingsService,
-    history_service: SensorHistoryService,
-    history_retention_days: int,
-    bot,
-) -> None:
-    """Background task to continuously monitor sensors and send alerts.
-
-    Args:
-        serial_service: Serial reader service.
-        alert_service: Alert manager service.
-        user_service: User settings service.
-        history_service: Sensor history persistence service.
-        history_retention_days: Retention window in days for persisted readings.
-        bot: Telegram bot instance for connection notifications.
-    """
-    logger.info("Starting monitoring loop")
-    was_connected = serial_service.is_connected()
-
-    next_purge_time = datetime.now(timezone.utc) + timedelta(hours=1)
-
-    while True:
+def _install_signal_handlers(stop_event: asyncio.Event) -> None:
+    loop = asyncio.get_running_loop()
+    for stop_signal in (signal.SIGINT, signal.SIGTERM):
         try:
-            # Read sensor data
-            reading = await serial_service.read_sensor_data()
+            loop.add_signal_handler(stop_signal, stop_event.set)
+        except NotImplementedError:
+            signal.signal(stop_signal, lambda *_args: stop_event.set())
 
-            # Check connection state changes
-            is_connected = serial_service.is_connected()
 
-            if is_connected and not was_connected:
-                # Connection restored
-                logger.info("Arduino connection restored")
-                await notify_all_users(
-                    bot,
-                    user_service,
-                    "✅ Arduino connection restored!\n\nSensor monitoring resumed.",
-                )
-                was_connected = True
-            elif not is_connected and was_connected:
-                # Connection lost
-                logger.warning("Arduino connection lost")
-                await notify_all_users(
-                    bot, user_service, "⚠️ Arduino connection lost!\n\nAttempting to reconnect..."
-                )
-                was_connected = False
-
-            if reading is not None:
-                try:
-                    await history_service.insert_reading(reading)
-                except Exception as e:
-                    logger.error(f"Failed to persist sensor reading: {e}", exc_info=True)
-
-                # Get all registered users
-                users = await user_service.get_all_users()
-
-                # Check thresholds for each user
-                for user in users:
-                    await alert_service.process_reading(reading, user.chat_id)
-            else:
-                # No reading available - try to reconnect if disconnected
-                if not is_connected:
-                    logger.debug("Attempting to reconnect to Arduino...")
-                    reconnected = await serial_service.connect()
-                    if reconnected and not was_connected:
-                        # First successful reconnection
-                        logger.info("Arduino reconnected successfully")
-                        await notify_all_users(
-                            bot,
-                            user_service,
-                            "✅ Arduino connection restored!\n\nSensor monitoring resumed.",
-                        )
-                        was_connected = True
-
-            now = datetime.now(timezone.utc)
-            if now >= next_purge_time:
-                try:
-                    deleted = await history_service.purge_older_than(history_retention_days)
-                    logger.info(
-                        "Sensor history retention cleanup completed: "
-                        f"deleted={deleted}, days={history_retention_days}"
-                    )
-                except Exception as e:
-                    logger.error(f"Sensor history retention cleanup failed: {e}", exc_info=True)
-                next_purge_time = now + timedelta(hours=1)
-
-            # Wait before next reading (Arduino sends every second)
-            await asyncio.sleep(1)
-
-        except asyncio.CancelledError:
-            logger.info("Monitoring loop cancelled")
-            break
-        except Exception as e:
-            logger.error(f"Error in monitoring loop: {e}", exc_info=True)
-            await asyncio.sleep(5)  # Wait before retrying
+def _create_exporter(config: Config, metrics: SensorMetrics) -> SensorExporter:
+    reader = SerialReader(
+        config.serial_port,
+        config.serial_baud_rate,
+        config.serial_timeout_seconds,
+        metrics,
+    )
+    return SensorExporter(reader, metrics, MqttPublisher(config, metrics))
 
 
 async def main() -> None:
-    """Initialize and run the bot."""
-    # Load configuration
-    try:
-        config = load_config()
-    except Exception as e:
-        print(f"Failed to load configuration: {e}")
-        return
-
-    # Setup logging
-    setup_logging(config.log_level)
-    logger.info("Bot starting...")
-
-    # Initialize database
-    database = Database(config.database_url)
-    try:
-        await database.connect()
-        logger.info("Database initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
-        return
-
-    # Initialize services
-    user_settings_module.user_settings_service = UserSettingsService(database)
-    sensor_history_service = SensorHistoryService(database)
-    serial_reader_module.serial_reader_service = SerialReaderService(
-        port=config.serial_port, baud_rate=config.serial_baud_rate
+    """Start the metrics endpoint and process Arduino readings until stopped."""
+    config = load_config()
+    logging.basicConfig(
+        level=config.log_level.upper(),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-
-    # Connect to Arduino
-    connected = await serial_reader_module.serial_reader_service.connect()
-    if connected:
-        logger.info("Arduino connected successfully")
-    else:
-        logger.warning("Failed to connect to Arduino - will retry in background")
-
-    # Initialize bot application
+    metrics = SensorMetrics()
+    server = MetricsHttpServer(config.metrics_host, config.metrics_port)
+    exporter = _create_exporter(config, metrics)
+    stop_event = asyncio.Event()
+    _install_signal_handlers(stop_event)
+    server.start()
+    exporter.mqtt_publisher.start()
+    logger.info("Prometheus metrics available on %s:%s", config.metrics_host, config.metrics_port)
     try:
-        app = Application.builder().token(config.telegram_bot_token).build()
-
-        # Initialize alert manager with bot instance
-        alert_manager_module.alert_manager = AlertManager(database=database, bot=app.bot)
-
-        # Register handlers
-        app.add_handler(CommandHandler("start", start_handler))
-        app.add_handler(CommandHandler("help", help_handler))
-        app.add_handler(CommandHandler("sensors", sensors_handler))
-        app.add_handler(CommandHandler("status", status_handler))
-        app.add_handler(CommandHandler("settings", settings_handler))
-        app.add_handler(CommandHandler("set_humidity_min", set_humidity_min_handler))
-        app.add_handler(CommandHandler("set_humidity_max", set_humidity_max_handler))
-
-        logger.info("Bot initialized successfully")
-
-        # Start bot
-        await app.initialize()
-        await app.start()
-        logger.info("Bot started successfully")
-
-        # Start background monitoring task
-        monitoring_task = asyncio.create_task(
-            monitoring_loop(
-                serial_reader_module.serial_reader_service,
-                alert_manager_module.alert_manager,
-                user_settings_module.user_settings_service,
-                sensor_history_service,
-                config.mcp_max_history_days,
-                app.bot,
-            )
-        )
-
-        # Run until stopped
-        await app.updater.start_polling()
-
-        # Keep running
-        await asyncio.Event().wait()
-
-    except KeyboardInterrupt:
-        logger.info("Received shutdown signal")
-    except Exception as e:
-        logger.error(f"Bot error: {e}", exc_info=True)
+        await exporter.run(stop_event)
     finally:
-        # Cleanup
-        if "monitoring_task" in locals():
-            monitoring_task.cancel()
-            try:
-                await monitoring_task
-            except asyncio.CancelledError:
-                pass
-        if "app" in locals():
-            await app.stop()
-            await app.shutdown()
-        if serial_reader_module.serial_reader_service:
-            await serial_reader_module.serial_reader_service.disconnect()
-        await database.close()
-        logger.info("Bot stopped")
+        server.stop()
 
 
 if __name__ == "__main__":

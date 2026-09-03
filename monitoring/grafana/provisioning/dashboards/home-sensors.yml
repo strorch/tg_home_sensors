@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: Home sensors
+    orgId: 1
+    folder: Home sensors
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

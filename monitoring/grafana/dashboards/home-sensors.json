@@ -1,0 +1,116 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ppm"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "value", "graphMode": "area", "textMode": "auto"},
+      "targets": [{"expr": "home_sensor_co2_ppm{sensor=\"scd41\"}", "refId": "A"}],
+      "title": "SCD41 CO₂",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "celsius"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 8, "x": 8, "y": 0},
+      "id": 2,
+      "options": {"colorMode": "value", "graphMode": "area", "textMode": "auto"},
+      "targets": [
+        {"expr": "home_sensor_temperature_celsius{sensor=\"dht\"}", "legendFormat": "DHT", "refId": "A"},
+        {"expr": "home_sensor_temperature_celsius{sensor=\"scd41\"}", "legendFormat": "SCD41", "refId": "B"}
+      ],
+      "title": "Temperature",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 0},
+      "id": 3,
+      "options": {"colorMode": "value", "graphMode": "area", "textMode": "auto"},
+      "targets": [
+        {"expr": "home_sensor_humidity_percent{sensor=\"dht\"}", "legendFormat": "DHT", "refId": "A"},
+        {"expr": "home_sensor_humidity_percent{sensor=\"scd41\"}", "legendFormat": "SCD41", "refId": "B"}
+      ],
+      "title": "Humidity",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ppm"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 4},
+      "id": 4,
+      "targets": [{"expr": "home_sensor_co2_ppm{sensor=\"scd41\"}", "legendFormat": "CO₂", "refId": "A"}],
+      "title": "CO₂ history",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "celsius"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 4},
+      "id": 5,
+      "targets": [
+        {"expr": "home_sensor_temperature_celsius", "legendFormat": "{{sensor}}", "refId": "A"}
+      ],
+      "title": "Temperature comparison",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 4},
+      "id": 6,
+      "targets": [
+        {"expr": "home_sensor_humidity_percent", "legendFormat": "{{sensor}}", "refId": "A"}
+      ],
+      "title": "Humidity comparison",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"mappings": [{"options": {"0": {"text": "Disconnected"}, "1": {"text": "Connected"}}, "type": "value"}]}, "overrides": []},
+      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 12},
+      "id": 7,
+      "options": {"colorMode": "background", "graphMode": "none", "textMode": "auto"},
+      "targets": [{"expr": "home_sensor_serial_connected", "refId": "A"}],
+      "title": "Arduino serial",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 4, "w": 8, "x": 8, "y": 12},
+      "id": 8,
+      "options": {"colorMode": "value", "graphMode": "none", "textMode": "auto"},
+      "targets": [{"expr": "time() - home_sensor_last_reading_timestamp_seconds", "refId": "A"}],
+      "title": "Last reading age",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 12},
+      "id": 9,
+      "options": {"colorMode": "value", "graphMode": "none", "textMode": "auto"},
+      "targets": [{"expr": "rate(home_sensor_parse_errors_total[5m]) + rate(home_sensor_read_errors_total[5m])", "refId": "A"}],
+      "title": "Exporter error rate",
+      "type": "stat"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 41,
+  "tags": ["arduino", "home", "sensors"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "title": "Home sensors",
+  "uid": "home-sensors",
+  "version": 1
+}

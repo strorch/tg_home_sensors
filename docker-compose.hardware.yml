@@ -1,0 +1,4 @@
+services:
+  sensor-exporter:
+    devices:
+      - "${SERIAL_PORT:-/dev/ttyACM0}:${SERIAL_PORT:-/dev/ttyACM0}"

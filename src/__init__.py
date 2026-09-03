@@ -1,1 +1,1 @@
-# Arduino sensor monitoring Telegram bot
+"""Arduino home sensors exporter."""

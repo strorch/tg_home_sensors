@@ -1,7 +1,5 @@
-version: "3.9"
-
 services:
-  bot:
+  sensor-exporter:
     volumes:
       - ..:/app:cached
     command: sleep infinity

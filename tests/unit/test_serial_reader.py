@@ -1,115 +1,99 @@
-"""Unit tests for serial reader service."""
+"""Serial reader tests."""
 
-import pytest
 from unittest.mock import MagicMock, patch
 
-from src.bot.services.serial_reader import SerialReaderService
+import pytest
+from prometheus_client import CollectorRegistry
+
+from src.sensors.metrics import SensorMetrics
+from src.sensors.models import SensorReading, SensorStatus
+from src.sensors.serial_reader import SerialReader
+
+
+def make_reader(metrics: SensorMetrics) -> SerialReader:
+    return SerialReader("/dev/ttyACM0", 115200, 2.0, metrics)
 
 
 @pytest.mark.asyncio
-async def test_serial_reader_connect():
-    """Test serial reader can connect to Arduino."""
-    service = SerialReaderService(port="/dev/ttyUSB0", baud_rate=9600)
+async def test_connect_uses_configured_serial_settings(sensor_metrics: SensorMetrics) -> None:
+    reader = make_reader(sensor_metrics)
+    with patch("serial.Serial") as serial_class:
+        serial_class.return_value = MagicMock(is_open=True)
 
-    with patch("serial.Serial") as mock_serial:
-        mock_serial.return_value = MagicMock()
+        connected = await reader.connect()
 
-        await service.connect()
-
-        assert service.is_connected()
-        mock_serial.assert_called_once_with("/dev/ttyUSB0", 9600, timeout=2.0)
+    assert connected is True
+    serial_class.assert_called_once_with("/dev/ttyACM0", 115200, timeout=2.0)
 
 
 @pytest.mark.asyncio
-async def test_serial_reader_read_data():
-    """Test serial reader can read sensor data."""
-    service = SerialReaderService(port="/dev/ttyUSB0", baud_rate=9600)
+async def test_read_complete_grouped_message(sensor_metrics: SensorMetrics) -> None:
+    reader = make_reader(sensor_metrics)
+    reader._serial = MagicMock(is_open=True)
+    reader._serial.readline.return_value = (
+        b'{"dht":{"temperature_celsius":23.4,"humidity_percent":48.1},'
+        b'"scd41":{"co2_ppm":812,"temperature_celsius":24.1,'
+        b'"humidity_percent":46.8}}\n'
+    )
 
-    with patch("serial.Serial") as mock_serial:
-        mock_instance = MagicMock()
-        mock_instance.readline.return_value = (
-            b'{"humidity":56.00,"dht_temperature":23.40,"lm35_temperature":24.93,'
-            b'"thermistor_temperature":22.73}\n'
-        )
-        mock_serial.return_value = mock_instance
+    message = await reader.read_message()
 
-        await service.connect()
-        reading = await service.read_sensor_data()
-
-        assert reading is not None
-        assert reading.humidity == 56.0
+    assert isinstance(message, SensorReading)
+    assert message.scd41.co2_ppm == 812
 
 
 @pytest.mark.asyncio
-async def test_serial_reader_connection_failure():
-    """Test serial reader handles connection failure."""
-    service = SerialReaderService(port="/dev/ttyUSB0", baud_rate=9600)
+async def test_read_status_does_not_count_parse_error(
+    registry: CollectorRegistry,
+    sensor_metrics: SensorMetrics,
+) -> None:
+    reader = make_reader(sensor_metrics)
+    reader._serial = MagicMock(is_open=True)
+    reader._serial.readline.return_value = b'{"status":"started"}\n'
 
-    with patch("serial.Serial", side_effect=Exception("Connection failed")):
-        result = await service.connect()
+    message = await reader.read_message()
 
-        assert result is False
-        assert not service.is_connected()
-
-
-@pytest.mark.asyncio
-async def test_serial_reader_reconnection_backoff():
-    """Test serial reader uses exponential backoff for reconnection."""
-    service = SerialReaderService(port="/dev/ttyUSB0", baud_rate=9600)
-
-    with patch("serial.Serial", side_effect=Exception("Connection failed")):
-        # First attempt
-        await service.connect()
-        assert service.connection_state.reconnect_attempts == 1
-        assert service.connection_state.backoff_delay == 2.0
-
-        # Second attempt
-        await service.connect()
-        assert service.connection_state.reconnect_attempts == 2
-        assert service.connection_state.backoff_delay == 4.0
-
-        # Third attempt
-        await service.connect()
-        assert service.connection_state.reconnect_attempts == 3
-        assert service.connection_state.backoff_delay == 8.0
+    assert isinstance(message, SensorStatus)
+    assert registry.get_sample_value("home_sensor_parse_errors_total") == 0
 
 
 @pytest.mark.asyncio
-async def test_serial_reader_disconnect():
-    """Test serial reader can disconnect gracefully."""
-    service = SerialReaderService(port="/dev/ttyUSB0", baud_rate=9600)
+async def test_invalid_line_counts_parse_error(
+    registry: CollectorRegistry,
+    sensor_metrics: SensorMetrics,
+) -> None:
+    reader = make_reader(sensor_metrics)
+    reader._serial = MagicMock(is_open=True)
+    reader._serial.readline.return_value = b"invalid\n"
 
-    with patch("serial.Serial") as mock_serial:
-        mock_instance = MagicMock()
-        mock_serial.return_value = mock_instance
+    message = await reader.read_message()
 
-        await service.connect()
-        await service.disconnect()
-
-        mock_instance.close.assert_called_once()
-        assert not service.is_connected()
+    assert message is None
+    assert registry.get_sample_value("home_sensor_parse_errors_total") == 1
 
 
 @pytest.mark.asyncio
-async def test_serial_reader_get_latest_reading():
-    """Test getting latest reading returns cached value."""
-    service = SerialReaderService(port="/dev/ttyUSB0", baud_rate=9600)
+async def test_connect_failure_updates_backoff(sensor_metrics: SensorMetrics) -> None:
+    reader = make_reader(sensor_metrics)
+    with patch("serial.Serial", side_effect=OSError):
+        connected = await reader.connect()
 
-    # Initially None
-    assert service.get_latest_reading() is None
+    assert connected is False
+    assert reader.state.reconnect_attempts == 1
+    assert reader.state.backoff_seconds == 2
 
-    # After reading data
-    with patch("serial.Serial") as mock_serial:
-        mock_instance = MagicMock()
-        mock_instance.readline.return_value = (
-            b'{"humidity":56.00,"dht_temperature":23.40,"lm35_temperature":24.93,'
-            b'"thermistor_temperature":22.73}\n'
-        )
-        mock_serial.return_value = mock_instance
 
-        await service.connect()
-        await service.read_sensor_data()
+@pytest.mark.asyncio
+async def test_read_failure_disconnects(
+    registry: CollectorRegistry,
+    sensor_metrics: SensorMetrics,
+) -> None:
+    reader = make_reader(sensor_metrics)
+    reader._serial = MagicMock(is_open=True)
+    reader._serial.readline.side_effect = OSError
 
-        reading = service.get_latest_reading()
-        assert reading is not None
-        assert reading.humidity == 56.0
+    message = await reader.read_message()
+
+    assert message is None
+    assert reader.is_connected() is False
+    assert registry.get_sample_value("home_sensor_read_errors_total") == 1
