@@ -12,7 +12,7 @@
 
 ## Serial contract
 
-A complete reading is accepted only in this form:
+A reading uses this grouped form:
 
 ```json
 {
@@ -28,8 +28,10 @@ A complete reading is accepted only in this form:
 }
 ```
 
-Firmware status objects contain a non-empty `status` string. Invalid and partial readings are
-discarded and counted. The exporter adds a UTC `observed_at` timestamp after validation.
+Any measurement may be `null` when that sensor is unavailable. The reading is accepted when at
+least one measurement is valid; unavailable Prometheus series are removed and MQTT preserves
+the null fields. Firmware status objects contain a non-empty `status` string. Invalid readings
+are discarded and counted. The exporter adds a UTC `observed_at` timestamp after validation.
 
 ## Operations
 

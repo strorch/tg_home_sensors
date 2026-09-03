@@ -30,7 +30,7 @@ def _counter(name: str, description: str, registry: CollectorRegistry) -> Counte
     return Counter(name, description, registry=registry)
 
 
-def _update_labeled(gauge: Gauge, sensor: str, value: float | int | None) -> None:
+def _update_labeled(gauge: Gauge, sensor: str, value: float | None) -> None:
     if value is None:
         try:
             gauge.remove(sensor)

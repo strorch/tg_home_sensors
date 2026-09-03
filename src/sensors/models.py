@@ -1,7 +1,6 @@
 """Sensor readings received from Arduino."""
 
 from datetime import UTC, datetime
-
 from typing import Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator

@@ -6,7 +6,7 @@ import pytest
 from prometheus_client import CollectorRegistry
 
 from src.sensors.metrics import MetricsHttpServer, SensorMetrics
-from src.sensors.models import SensorReading
+from src.sensors.models import DhtReading, Scd41Reading, SensorReading
 
 
 def test_update_reading_exports_all_sensor_values(
@@ -39,6 +39,31 @@ def test_health_metrics_start_disconnected(
 ) -> None:
     assert registry.get_sample_value("home_sensor_serial_connected") == 0
     assert registry.get_sample_value("home_sensor_mqtt_connected") == 0
+
+
+def test_update_reading_removes_unavailable_values(
+    registry: CollectorRegistry,
+    sensor_metrics: SensorMetrics,
+    sensor_reading: SensorReading,
+) -> None:
+    sensor_metrics.update_reading(sensor_reading)
+    partial = sensor_reading.model_copy(
+        update={
+            "dht": DhtReading(temperature_celsius=None, humidity_percent=52.0),
+            "scd41": Scd41Reading(
+                co2_ppm=900,
+                temperature_celsius=24.0,
+                humidity_percent=None,
+            ),
+        }
+    )
+
+    sensor_metrics.update_reading(partial)
+
+    assert registry.get_sample_value("home_sensor_temperature_celsius", {"sensor": "dht"}) is None
+    assert registry.get_sample_value("home_sensor_humidity_percent", {"sensor": "scd41"}) is None
+    assert registry.get_sample_value("home_sensor_humidity_percent", {"sensor": "dht"}) == 52
+    assert registry.get_sample_value("home_sensor_co2_ppm", {"sensor": "scd41"}) == 900
 
 
 def test_metrics_http_server_lifecycle() -> None:

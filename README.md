@@ -34,9 +34,15 @@ The sketch emits one compact JSON object every five seconds at 115200 baud:
 {"dht":{"temperature_celsius":23.4,"humidity_percent":48.1},"scd41":{"co2_ppm":812,"temperature_celsius":24.1,"humidity_percent":46.8}}
 ```
 
-Startup and incomplete readings are also valid JSON, for example
-`{"status":"waiting_for_measurement"}`. A complete sample is exported only when both sensors
-have valid data.
+Startup status is also valid JSON, for example `{"status":"started"}`. Unavailable measurements
+are emitted as `null`; the exporter still publishes every available value from the other sensor:
+
+```json
+{"dht":{"temperature_celsius":23.4,"humidity_percent":48.1},"scd41":{"co2_ppm":null,"temperature_celsius":null,"humidity_percent":null}}
+```
+
+Unavailable Prometheus series are removed instead of retaining stale values, while MQTT keeps
+the explicit `null` fields.
 
 For an Arduino Uno, connect the SCD41 to `3.3V`, `GND`, `SDA/A4`, and `SCL/A5`. Leave the DHT
 connected on pin 4. The old LM35 and thermistor connections on `A0` and `A1` are no longer used.
@@ -131,6 +137,7 @@ home_sensor_humidity_percent{sensor=~"dht|scd41"} < 30 or home_sensor_humidity_p
 time() - home_sensor_last_reading_timestamp_seconds > 30
 home_sensor_serial_connected == 0
 up{job="home-sensors"} == 0
+absent(home_sensor_co2_ppm{sensor="scd41"})
 ```
 
 Adjust thresholds and pending periods in Grafana for the room being monitored. Keep the bot

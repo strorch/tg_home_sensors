@@ -7,7 +7,7 @@ import paho.mqtt.client as mqtt
 
 from src.config import Config
 from src.sensors.metrics import SensorMetrics
-from src.sensors.models import SensorReading
+from src.sensors.models import DhtReading, SensorReading
 from src.sensors.mqtt import MqttPublisher, serialize_reading
 
 
@@ -24,6 +24,17 @@ def test_serialize_reading_keeps_sensor_groups(sensor_reading: SensorReading) ->
         "humidity_percent": 46.8,
     }
     assert payload["observed_at"] == "2026-09-02T12:00:00Z"
+
+
+def test_serialize_reading_preserves_unavailable_values(sensor_reading: SensorReading) -> None:
+    partial = sensor_reading.model_copy(
+        update={"dht": DhtReading(temperature_celsius=None, humidity_percent=48.1)}
+    )
+
+    payload = json.loads(serialize_reading(partial))
+
+    assert payload["dht"]["temperature_celsius"] is None
+    assert payload["dht"]["humidity_percent"] == 48.1
 
 
 def test_publish_uses_retained_qos_one(

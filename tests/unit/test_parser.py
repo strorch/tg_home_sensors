@@ -30,6 +30,18 @@ def test_parse_status_message() -> None:
     assert message.status == "waiting_for_measurement"
 
 
+def test_parse_partial_reading_with_null_values() -> None:
+    message = parse_serial_data(
+        '{"dht":{"temperature_celsius":23.4,"humidity_percent":48.1},'
+        '"scd41":{"co2_ppm":null,"temperature_celsius":null,'
+        '"humidity_percent":null}}'
+    )
+
+    assert isinstance(message, SensorReading)
+    assert message.dht.temperature_celsius == 23.4
+    assert message.scd41.co2_ppm is None
+
+
 @pytest.mark.parametrize(
     "payload",
     [
@@ -37,6 +49,11 @@ def test_parse_status_message() -> None:
         "[]",
         '{"dht":{"temperature_celsius":23.4,"humidity_percent":48.1}}',
         '{"status":""}',
+        (
+            '{"dht":{"temperature_celsius":null,"humidity_percent":null},'
+            '"scd41":{"co2_ppm":null,"temperature_celsius":null,'
+            '"humidity_percent":null}}'
+        ),
         (
             '{"dht":{"temperature_celsius":23.4,"humidity_percent":101},'
             '"scd41":{"co2_ppm":812,"temperature_celsius":24.1,'
